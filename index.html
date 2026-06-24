@@ -221,7 +221,7 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
 .view-link:hover { color:var(--blue-dark); }
 
 /* ── PEOPLE ROWS ── */
-.person-row { display:flex; align-items:center; gap:12px; margin-bottom:13px; }
+.person-row { display:flex; align-items:flex-start; gap:12px; margin-bottom:16px; }
 .person-row:last-child { margin-bottom:0; }
 .avatar {
   width:32px; height:32px; border-radius:50%; flex-shrink:0;
@@ -527,12 +527,12 @@ const IMPORTANT_DATES = [
 ];
 
 const CONTACTS = [
-  { initials: "RM", name: "Roy Mathena", role: "Instructor" },
-  { initials: "JY", name: "Jerry Youngblood", role: "Instructor" },
-  { initials: "SJ", name: "Scott Johnson", role: "Instructor" },
-  { initials: "WP", name: "Wanda Peery", role: "Instructor" },
-  { initials: "MP", name: "Marica Porchia", role: "Instructor" },
-  { initials: "AH", name: "Amy Hamilton", role: "Instructor" }
+  { initials: "RM", name: "Roy Mathena", role: "Owner", email: "RoyM@psipm.com" },
+  { initials: "JY", name: "Jerry Youngblood", role: "Senior Instructor", email: "JerryY@psipm.com" },
+  { initials: "SJ", name: "Scott Johnson", role: "Executive VP", email: "ScottJ@psipm.com" },
+  { initials: "WP", name: "Wanda Peery", role: "Instructor", email: "WandaP@psipm.com" },
+  { initials: "MP", name: "Marcia Porchia", role: "Instructor", email: "MarciaP@psipm.com" },
+  { initials: "AH", name: "Amy Hamilton", role: "Instructor", email: "AmyH@psipm.com" }
 ];
 
 const QUICK_LINKS = [
@@ -708,7 +708,7 @@ function renderStaticSections(){
   contactsList.innerHTML = CONTACTS.map((c,i) => `
     <div class="person-row">
       <div class="avatar${i===0?'':' alt'}">${c.initials}</div>
-      <p><span class="name">${c.name}</span> — ${c.role}</p>
+      <p><span class="name">${c.name}</span> — ${c.role}<br><a href="mailto:${c.email}" style="color:var(--gray-500);font-size:11.5px;">${c.email}</a></p>
     </div>`).join('');
 
   // Teaching resources (Instructor Center)
@@ -744,7 +744,7 @@ function renderStaticSections(){
     instructorContactsList.innerHTML = CONTACTS.map((c,i) => `
       <div class="person-row">
         <div class="avatar${i===0?'':' alt'}">${c.initials}</div>
-        <p><span class="name">${c.name}</span> — ${c.role}</p>
+        <p><span class="name">${c.name}</span> — ${c.role}<br><a href="mailto:${c.email}" style="color:var(--gray-500);font-size:11.5px;">${c.email}</a></p>
       </div>`).join('');
   }
 }
