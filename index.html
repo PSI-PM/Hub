@@ -426,16 +426,16 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
         </div>
       </div>
 
+      <!-- TEACHING RESOURCES -->
+      <div class="card" style="margin-bottom:18px;">
+        <h2>Teaching resources</h2>
+        <div class="tile-grid" id="teaching-resources-grid"></div>
+      </div>
+
       <!-- CLASS MANAGEMENT -->
       <div class="card" style="margin-bottom:18px;">
         <h2>Class management</h2>
         <div class="tile-grid" id="class-management-grid"></div>
-      </div>
-
-      <!-- DIRECT LINKS -->
-      <div class="card" style="margin-bottom:18px;">
-        <h2>Direct links</h2>
-        <div class="tile-grid" id="direct-links-grid"></div>
       </div>
 
       <!-- ADMINISTRATIVE -->
@@ -542,14 +542,18 @@ const QUICK_LINKS = [
   { icon: "🧾", label: "Submit invoice", url: "#" }
 ];
 
+const TEACHING_RESOURCES = [
+  { icon: "📘", label: "PMP", url: "#" },
+  { icon: "📗", label: "CAPM", url: "#" },
+  { icon: "🧩", label: "Practical", url: "#" },
+  { icon: "📊", label: "CPMAI", url: "#" }
+];
+
 const CLASS_MANAGEMENT = [
   { icon: "✉️", label: "Student Communication Templates", url: "#" },
   { icon: "🗂️", label: "Forms", url: "#" },
   { icon: "📋", label: "End-of-Class Checklist", url: "#" },
-  { icon: "🛠️", label: "Class Setup Guide", url: "#" }
-];
-
-const DIRECT_LINKS = [
+  { icon: "🛠️", label: "Class Setup Guide", url: "#" },
   { icon: "🎓", label: "PSI PM LMS", url: "https://psipm.talentlms.com/plus/dashboard" },
   { icon: "📘", label: "PMP LMS", url: "https://pmp-psipm.talentlms.com/plus/" },
   { icon: "📗", label: "CAPM LMS", url: "https://capm-psipm.talentlms.com/plus/login" },
@@ -707,19 +711,19 @@ function renderStaticSections(){
       <p><span class="name">${c.name}</span> — ${c.role}</p>
     </div>`).join('');
 
-  // Class management (Instructor Center)
-  const classMgmtGrid = document.getElementById('class-management-grid');
-  if (classMgmtGrid) {
-    classMgmtGrid.innerHTML = CLASS_MANAGEMENT.map(t => `
+  // Teaching resources (Instructor Center)
+  const teachingGrid = document.getElementById('teaching-resources-grid');
+  if (teachingGrid) {
+    teachingGrid.innerHTML = TEACHING_RESOURCES.map(t => `
       <a class="tile-link" href="${t.url}" target="_blank" rel="noopener">
         <span class="ic">${t.icon}</span>${t.label}
       </a>`).join('');
   }
 
-  // Direct links to instructor tools (Instructor Center)
-  const directLinksGrid = document.getElementById('direct-links-grid');
-  if (directLinksGrid) {
-    directLinksGrid.innerHTML = DIRECT_LINKS.map(t => `
+  // Class management (Instructor Center)
+  const classMgmtGrid = document.getElementById('class-management-grid');
+  if (classMgmtGrid) {
+    classMgmtGrid.innerHTML = CLASS_MANAGEMENT.map(t => `
       <a class="tile-link" href="${t.url}" target="_blank" rel="noopener">
         <span class="ic">${t.icon}</span>${t.label}
       </a>`).join('');
