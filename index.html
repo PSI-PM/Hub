@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Staff Home — PSI Project Management, Inc.</title>
+<meta name="description" content="Staff home dashboard for PSI Project Management, Inc.">
+<meta name="theme-color" content="#050f22">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Source+Sans+3:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<style>
+/* ============================================================
+   THEME TOKENS — matches the Instructor Hub / Attendance Portal
+   exactly so this feels like the same product family.
+   ============================================================ */
+:root {
+  --blue:#00a8ff; --blue-dark:#0078dd; --blue-light:rgba(0,140,255,0.12); --blue-mid:rgba(0,140,255,0.3);
+  --green:#00c8a8; --green-dark:#00a08a; --green-light:rgba(0,180,160,0.12);
+  --yellow:#e0a030; --yellow-dark:#c07800; --yellow-light:rgba(220,150,30,0.12);
+  --red:#ff6060; --red-dark:#cc3030; --red-light:rgba(255,80,80,0.12);
+  --bg:#050f22; --surface:#071020;
+  --gray-50:rgba(255,255,255,0.03); --gray-100:rgba(255,255,255,0.05); --gray-200:rgba(0,140,255,0.2);
+  --gray-400:#7ab0d0; --gray-500:#5a8aaa; --gray-700:#90c8f0; --gray-900:#e0f0ff;
+  --radius:10px; --radius-lg:16px;
+  --card-bg:rgba(0,60,180,0.08); --card-border:rgba(0,140,255,0.25);
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:"Source Sans 3",sans-serif; background:var(--bg); color:var(--gray-900); min-height:100vh; -webkit-text-size-adjust:100%; }
+h1,h2,h3 { font-family:"Playfair Display",serif; color:var(--gray-900); }
+a { color:inherit; }
+button { cursor:pointer; font-family:inherit; }
+@media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
+
+.screen { display:none; min-height:100vh; flex-direction:column; }
+.screen.active { display:flex; }
+
+/* ── LOGIN ── */
+#screen-login {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 40%,rgba(0,90,255,0.4) 0%,rgba(0,50,180,0.15) 45%,transparent 70%),
+    radial-gradient(ellipse 50% 40% at 20% 80%,rgba(0,40,140,0.25) 0%,transparent 60%),
+    linear-gradient(180deg,#040d1c 0%,#050f22 50%,#04091a 100%);
+  align-items:center; justify-content:center; padding:20px;
+}
+.login-box {
+  background:rgba(0,60,180,0.07); border:0.5px solid rgba(0,140,255,0.22);
+  border-radius:var(--radius-lg); padding:44px; width:100%; max-width:420px;
+  box-shadow:0 24px 64px rgba(0,0,0,0.4);
+}
+.login-brand { text-align:center; margin-bottom:28px; }
+.login-logo {
+  display:inline-block; background:rgba(0,140,255,0.15); border:0.5px solid rgba(0,160,255,0.4);
+  color:white; font-family:"Playfair Display",serif; font-size:18px; font-weight:700;
+  padding:10px 18px; border-radius:8px; margin-bottom:8px;
+  box-shadow:0 0 20px rgba(0,140,255,0.3);
+}
+.login-logo span { color:#00e8ff; text-shadow:0 0 14px rgba(0,230,255,0.8); }
+.login-tagline { font-size:12px; color:var(--gray-500); margin-top:4px; }
+.login-title { font-size:22px; color:var(--gray-900); margin-bottom:4px; }
+.login-sub { font-size:13px; color:var(--gray-500); margin-bottom:22px; }
+.btn-ms {
+  width:100%; padding:13px; border-radius:8px;
+  border:0.5px solid rgba(0,140,255,0.3); background:rgba(0,60,180,0.1);
+  color:var(--gray-900); font-size:14px; font-weight:600; transition:all 0.15s;
+  display:flex; align-items:center; justify-content:center; gap:10px;
+}
+.btn-ms:hover { background:rgba(0,80,200,0.2); border-color:rgba(0,180,255,0.5); }
+.ms-icon { width:20px; height:20px; }
+.alert { padding:10px 14px; border-radius:6px; font-size:13px; margin-bottom:12px; display:none; }
+.alert.visible { display:block; }
+.alert-error { background:var(--red-light); border:1px solid rgba(255,96,96,0.3); color:#ff9090; }
+.login-footer { margin-top:28px; padding-top:20px; border-top:1px solid var(--gray-100); text-align:center; font-size:11px; color:var(--gray-500); }
+
+/* ── HEADER ── */
+.app-header {
+  background:rgba(5,13,26,0.92); border-bottom:0.5px solid rgba(0,140,255,0.2);
+  padding:0 24px; box-shadow:0 0 20px rgba(0,80,255,0.15);
+  position:sticky; top:0; z-index:100; backdrop-filter:blur(12px);
+  display:flex; align-items:center; justify-content:space-between; height:58px;
+}
+.header-left { display:flex; align-items:center; gap:14px; }
+.header-logo {
+  background:rgba(0,140,255,0.15); border:0.5px solid rgba(0,160,255,0.4);
+  color:white; box-shadow:0 0 12px rgba(0,140,255,0.25);
+  font-family:"Playfair Display",serif; font-size:15px; font-weight:700;
+  padding:5px 12px; border-radius:6px;
+}
+.header-logo span { color:#00e8ff; text-shadow:0 0 14px rgba(0,230,255,0.8); }
+.header-divider { width:1px; height:22px; background:var(--gray-200); }
+.header-subtitle { font-size:12px; color:var(--gray-500); }
+.header-right { display:flex; align-items:center; gap:14px; }
+.header-user { font-size:12px; color:var(--gray-500); }
+.header-user strong { color:var(--gray-700); }
+.logout-btn { font-size:12px; color:var(--gray-400); background:none; border:0.5px solid rgba(0,140,255,0.2); padding:5px 12px; border-radius:6px; transition:all 0.15s; }
+.logout-btn:hover { color:var(--red); border-color:rgba(255,96,96,0.3); }
+
+/* ── MAIN ── */
+#screen-app {
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 0%,rgba(0,90,255,0.28) 0%,rgba(0,60,180,0.1) 45%,transparent 70%),
+    linear-gradient(180deg,#040d1c 0%,#050f22 40%,#04091a 100%);
+  background-attachment:fixed;
+}
+.app-main { max-width:1180px; margin:0 auto; padding:28px 24px 64px; flex:1; width:100%; }
+
+/* ── HERO / GREETING ── */
+.hero-card {
+  background:var(--card-bg); border:0.5px solid var(--card-border); border-radius:var(--radius-lg);
+  padding:28px 26px; margin-bottom:18px; box-shadow:0 0 16px rgba(0,80,255,0.08);
+}
+.hero-card h1 { font-size:24px; margin-bottom:5px; }
+.hero-card p { font-size:13.5px; color:var(--gray-500); }
+
+/* ── GRID ROWS ── */
+.row { display:grid; gap:18px; margin-bottom:18px; }
+.row.two-1-6-1 { grid-template-columns:1.6fr 1fr; }
+.row.two-even { grid-template-columns:1fr 1fr; }
+
+.card {
+  background:var(--card-bg); border:0.5px solid var(--card-border); border-radius:var(--radius-lg);
+  padding:20px 22px; box-shadow:0 0 16px rgba(0,80,255,0.08);
+}
+.card h2 {
+  font-size:16px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; gap:10px;
+}
+.card h2 .badge {
+  font-size:11px; font-weight:600; letter-spacing:0.04em; color:var(--blue);
+  background:var(--blue-light); border:0.5px solid rgba(0,160,255,0.3);
+  padding:4px 10px; border-radius:20px; font-family:"Source Sans 3",sans-serif;
+}
+
+/* ── ANNOUNCEMENTS ── */
+.announcement { display:flex; gap:12px; margin-bottom:16px; }
+.announcement:last-child { margin-bottom:0; }
+.announcement .icon {
+  width:36px; height:36px; border-radius:8px; flex-shrink:0; font-size:17px;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(0,140,255,0.15); border:0.5px solid rgba(0,160,255,0.3);
+}
+.announcement .title { font-size:14px; font-weight:600; color:var(--gray-900); margin-bottom:2px; }
+.announcement .desc { font-size:13px; color:var(--gray-400); line-height:1.5; margin-bottom:4px; }
+.announcement .meta { font-size:11px; color:var(--gray-500); }
+
+/* ── QUICK LINKS ── */
+.quick-links-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.quick-link {
+  display:flex; flex-direction:column; gap:8px; padding:14px;
+  border-radius:var(--radius); background:rgba(0,140,255,0.07); border:0.5px solid rgba(0,140,255,0.18);
+  font-size:12.5px; font-weight:500; color:var(--gray-700); text-decoration:none; transition:all 0.15s;
+}
+.quick-link:hover { border-color:rgba(0,180,255,0.45); background:rgba(0,100,255,0.12); }
+.quick-link .ic { font-size:18px; }
+
+/* ── TABLE ── */
+.table-wrap { overflow-x:auto; }
+table.data-table { width:100%; border-collapse:collapse; font-size:13px; }
+table.data-table th {
+  text-align:left; padding:8px 10px; font-size:11px; font-weight:600; letter-spacing:0.04em;
+  text-transform:uppercase; color:var(--gray-500); border-bottom:0.5px solid var(--card-border);
+}
+table.data-table td {
+  padding:11px 10px; border-bottom:0.5px solid rgba(0,140,255,0.08); color:var(--gray-400); white-space:nowrap;
+}
+table.data-table tr:last-child td { border-bottom:none; }
+table.data-table td.course { font-weight:600; color:var(--gray-900); }
+.pill { font-size:11px; padding:3px 10px; border-radius:20px; font-weight:600; display:inline-block; }
+.pill.confirmed, .pill.inprogress { background:var(--blue-light); color:var(--blue); }
+.pill.tentative, .pill.upcoming { background:var(--yellow-light); color:var(--yellow); }
+.pill.completed { background:var(--green-light); color:var(--green); }
+.view-link { display:block; text-align:right; margin-top:12px; font-size:13px; color:var(--blue); font-weight:600; text-decoration:none; }
+.view-link:hover { color:var(--blue-dark); }
+
+/* ── PEOPLE ROWS ── */
+.person-row { display:flex; align-items:center; gap:12px; margin-bottom:13px; }
+.person-row:last-child { margin-bottom:0; }
+.avatar {
+  width:32px; height:32px; border-radius:50%; flex-shrink:0;
+  background:rgba(0,140,255,0.15); border:0.5px solid rgba(0,160,255,0.3); color:var(--blue);
+  display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700;
+}
+.avatar.alt { background:var(--gray-100); border-color:var(--gray-200); color:var(--gray-700); }
+.person-row p { font-size:13px; color:var(--gray-400); }
+.person-row .name { font-weight:600; color:var(--gray-900); }
+
+/* ── DATES ── */
+.date-row { display:flex; gap:12px; align-items:baseline; margin-bottom:12px; }
+.date-row:last-child { margin-bottom:0; }
+.date-row .date { font-size:11px; color:var(--blue); font-weight:700; min-width:42px; flex-shrink:0; }
+.date-row .label { font-size:13px; color:var(--gray-400); }
+
+/* ── DOCS ── */
+.doc-row { display:flex; align-items:center; gap:12px; margin-bottom:13px; }
+.doc-row:last-child { margin-bottom:0; }
+.doc-row .ic { font-size:17px; width:20px; text-align:center; flex-shrink:0; }
+.doc-row .name { font-size:13px; color:var(--gray-900); margin-bottom:2px; word-break:break-word; }
+.doc-row .meta { font-size:11px; color:var(--gray-500); }
+
+/* ── STATES ── */
+.empty-state, .loading-state, .error-state {
+  text-align:center; padding:28px 12px; font-size:13px; color:var(--gray-500);
+}
+.error-state { color:#ff9090; }
+.skeleton-line {
+  height:14px; border-radius:4px; background:rgba(0,140,255,0.08);
+  margin-bottom:10px; animation:pulse 1.4s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+
+/* ── LOADING / TOAST ── */
+.loading-overlay { position:fixed; inset:0; background:rgba(5,13,26,0.85); display:none; align-items:center; justify-content:center; z-index:500; backdrop-filter:blur(4px); }
+.loading-overlay.visible { display:flex; }
+.spinner { width:40px; height:40px; border:3px solid rgba(0,140,255,0.2); border-top-color:var(--blue); border-radius:50%; animation:spin 0.8s linear infinite; }
+@keyframes spin { to{transform:rotate(360deg);} }
+.toast {
+  position:fixed; bottom:24px; right:24px; background:rgba(0,60,180,0.95); border:0.5px solid rgba(0,140,255,0.4);
+  border-radius:10px; padding:12px 18px; font-size:13px; color:var(--gray-900); box-shadow:0 8px 32px rgba(0,0,0,0.4);
+  z-index:600; transform:translateY(80px); opacity:0; transition:all 0.3s; max-width:320px;
+}
+.toast.visible { transform:translateY(0); opacity:1; }
+.toast.toast-error { border-color:rgba(255,96,96,0.4); background:rgba(80,20,20,0.95); }
+
+@media (max-width:900px) {
+  .row.two-1-6-1, .row.two-even { grid-template-columns:1fr; }
+}
+@media (max-width:640px) {
+  .app-header { padding:0 16px; }
+  .app-main { padding:20px 16px 48px; }
+  .login-box { padding:28px 20px; }
+  .quick-links-grid { grid-template-columns:1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loading"><div class="spinner"></div></div>
+<div class="toast" id="toast"></div>
+
+<!-- LOGIN -->
+<div class="screen active" id="screen-login">
+  <div class="login-box">
+    <div class="login-brand">
+      <div class="login-logo">PSI <span>PM</span></div>
+      <div class="login-tagline">PSI Project Management Inc. — Staff Home</div>
+    </div>
+    <div class="login-title">Staff Sign In</div>
+    <div class="login-sub">Sign in with your PSI Microsoft account</div>
+    <div class="alert alert-error" id="login-error"></div>
+    <button class="btn-ms" onclick="handleMSLogin()">
+      <svg class="ms-icon" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
+        <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
+        <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
+        <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
+      </svg>
+      Sign in with Microsoft
+    </button>
+    <div class="login-footer">PSI Project Management Inc. · Staff Home v1.0</div>
+  </div>
+</div>
+
+<!-- APP -->
+<div class="screen" id="screen-app">
+  <header class="app-header">
+    <div class="header-left">
+      <div class="header-logo">PSI <span>PM</span></div>
+      <div class="header-divider"></div>
+      <div class="header-subtitle">Staff Home</div>
+    </div>
+    <div class="header-right">
+      <div class="header-user">Signed in as <strong id="header-name"></strong></div>
+      <button class="logout-btn" onclick="handleLogout()">Sign Out</button>
+    </div>
+  </header>
+
+  <main class="app-main">
+
+    <!-- HERO / GREETING -->
+    <div class="hero-card">
+      <h1 id="greeting-title">Good morning</h1>
+      <p id="greeting-sub">Loading today's overview…</p>
+    </div>
+
+    <!-- ANNOUNCEMENTS + QUICK LINKS -->
+    <div class="row two-1-6-1">
+      <div class="card">
+        <h2>Company announcements</h2>
+        <div id="announcements-list"></div>
+      </div>
+      <div class="card">
+        <h2>Quick links</h2>
+        <div class="quick-links-grid" id="quick-links-grid"></div>
+      </div>
+    </div>
+
+    <!-- UPCOMING CLASSES -->
+    <div class="card" style="margin-bottom:18px;">
+      <h2>Upcoming classes <span class="badge">Next 60 days</span></h2>
+      <div class="table-wrap">
+        <table class="data-table" id="classes-table" style="display:none;">
+          <thead>
+            <tr>
+              <th>Course</th><th>Client</th><th>Start</th><th>End</th>
+              <th>Instructor</th><th>Students</th><th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="classes-rows"></tbody>
+        </table>
+        <div id="classes-state" class="loading-state">
+          <div class="skeleton-line" style="width:100%"></div>
+          <div class="skeleton-line" style="width:90%"></div>
+          <div class="skeleton-line" style="width:95%"></div>
+        </div>
+      </div>
+      <a class="view-link" href="https://psiprojectmanagement.sharepoint.com/sites/PSIProjectManagement" target="_blank" rel="noopener">View full schedule &rarr;</a>
+    </div>
+
+    <!-- INSTRUCTOR ASSIGNMENTS + IMPORTANT DATES -->
+    <div class="row two-even">
+      <div class="card">
+        <h2>Instructor assignments — active &amp; upcoming</h2>
+        <div id="instructor-assignments-list">
+          <div class="skeleton-line" style="width:100%"></div>
+          <div class="skeleton-line" style="width:80%"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Important dates</h2>
+        <div id="important-dates-list"></div>
+      </div>
+    </div>
+
+    <!-- RECENT DOCUMENTS + CONTACT DIRECTORY -->
+    <div class="row two-even" style="margin-bottom:0;">
+      <div class="card">
+        <h2>Recent documents</h2>
+        <div id="recent-docs-list">
+          <div class="skeleton-line" style="width:100%"></div>
+          <div class="skeleton-line" style="width:85%"></div>
+          <div class="skeleton-line" style="width:92%"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Contact directory</h2>
+        <div id="contacts-list"></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+/* ============================================================
+   CONFIG — reused from the Attendance Portal's working Azure AD
+   app registration. Same tenant, same site, same lists.
+   ============================================================ */
+const CONFIG = {
+  clientId:   'ab30f561-3b18-458d-bc42-c2037ddedcb9',
+  tenantId:   '9e7b19f7-23f2-4301-8ee2-937876784648',
+  siteHostname: 'psiprojectmanagement.sharepoint.com',
+  sitePath:   '/sites/PSIProjectManagement',
+  siteId:     '35ccb356-7bb5-483b-a0ef-707ff1c43154',
+  coursesListId:    '1d435e7e-f510-4a96-b20f-2ba9b1b3babe',
+  studentsListId:   '51348acc-f711-48d7-9803-45bb1518b118',
+  attendanceListId: 'd464aa77-7218-49b3-8131-aede92fd8d29',
+  trainingRecordsListId: 'f2f81d00-cb73-4f62-b419-6935d3f54a28',
+};
+
+const SCOPES = ['Sites.ReadWrite.All','User.Read'];
+
+/* ============================================================
+   EDIT THESE ARRAYS by hand to update content that doesn't
+   have a live SharePoint source yet (same pattern as the
+   Instructor Hub's APPS array).
+   ============================================================ */
+const ANNOUNCEMENTS = [
+  {
+    icon: "🎓",
+    title: "PMP v4 workbooks now live",
+    desc: "All 26 ECO-task workbooks are posted under Course Materials.",
+    meta: "Posted recently"
+  },
+  {
+    icon: "📅",
+    title: "Office closed July 4th",
+    desc: "No classes scheduled that week — confirm with clients.",
+    meta: "Reminder"
+  }
+];
+
+const IMPORTANT_DATES = [
+  { date: "Jul 4",  label: "Office closed — holiday" },
+  { date: "Jul 15", label: "ATP annual renewal due" },
+  { date: "Aug 1",  label: "PMP exam content outline review" }
+];
+
+const CONTACTS = [
+  { initials: "SC", name: "Sarah Carter", role: "Instructor" },
+  { initials: "JL", name: "James Lee", role: "Instructor" },
+  { initials: "MO", name: "Maria Ortiz", role: "Instructor" }
+];
+
+const QUICK_LINKS = [
+  { icon: "📄", label: "PMP materials", url: "#" },
+  { icon: "🎓", label: "CAPM materials", url: "#" },
+  { icon: "📊", label: "CPMAI materials", url: "#" },
+  { icon: "🧾", label: "Submit invoice", url: "#" }
+];
+
+// ── MSAL ────────────────────────────────────────
+const msalApp = new msal.PublicClientApplication({
+  auth: {
+    clientId: CONFIG.clientId,
+    authority: `https://login.microsoftonline.com/${CONFIG.tenantId}`,
+    redirectUri: window.location.origin + window.location.pathname,
+  },
+  cache: { cacheLocation: 'sessionStorage' },
+});
+
+let state = { user: null, courses: [], students: [] };
+
+// ── UTILS ───────────────────────────────────────
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function showLoading(v){ document.getElementById('loading').classList.toggle('visible', v); }
+function showToast(msg, type=''){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast visible' + (type ? ' toast-' + type : '');
+  setTimeout(()=>t.classList.remove('visible'), 3500);
+}
+function fieldVal(f, key){
+  const v = f && f[key];
+  if (v == null) return '';
+  return typeof v === 'object' ? (v.Value ?? v.LookupValue ?? '') : v;
+}
+function formatDateShort(d){
+  return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+}
+function formatDateLong(d){
+  return d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+}
+function daysFromNow(n){
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return d;
+}
+function statusPillClass(status){
+  const s = (status || '').toLowerCase().replace(/\s+/g,'');
+  if (s === 'inprogress') return 'inprogress';
+  if (s === 'upcoming') return 'upcoming';
+  if (s === 'completed') return 'completed';
+  return 'tentative';
+}
+
+// ── AUTH ────────────────────────────────────────
+async function handleMSLogin(){
+  try {
+    showLoading(true);
+    await msalApp.loginRedirect({ scopes: SCOPES });
+  } catch(e) {
+    showLoading(false);
+    const errEl = document.getElementById('login-error');
+    errEl.textContent = 'Sign in failed: ' + (e.message || 'Please try again.');
+    errEl.classList.add('visible');
+  }
+}
+async function getToken(){
+  try {
+    const result = await msalApp.acquireTokenSilent({ scopes: SCOPES, account: state.user });
+    return result.accessToken;
+  } catch {
+    const result = await msalApp.acquireTokenRedirect({ scopes: SCOPES });
+    return result ? result.accessToken : null;
+  }
+}
+function handleLogout(){
+  state = { user:null, courses:[], students:[] };
+  msalApp.logoutRedirect({ postLogoutRedirectUri: window.location.href });
+}
+
+// ── GRAPH ────────────────────────────────────────
+async function graphGet(path){
+  const token = await getToken();
+  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+    headers:{ Authorization:`Bearer ${token}` }
+  });
+  if(!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+// ── ENTER APP ────────────────────────────────────
+function enterApp(){
+  showLoading(false);
+  const name = state.user.name || state.user.username;
+  const firstName = name.split(' ')[0];
+  document.getElementById('header-name').textContent = name;
+  document.getElementById('greeting-title').textContent = `Good morning, ${firstName}`;
+  document.getElementById('greeting-sub').textContent =
+    new Date().toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+  showScreen('screen-app');
+  renderStaticSections();
+  loadDashboardData();
+}
+
+// ── STATIC SECTIONS ─────────────────────────────
+function renderStaticSections(){
+  // Announcements
+  const annList = document.getElementById('announcements-list');
+  annList.innerHTML = ANNOUNCEMENTS.map(a => `
+    <div class="announcement">
+      <div class="icon">${a.icon}</div>
+      <div>
+        <div class="title">${a.title}</div>
+        <div class="desc">${a.desc}</div>
+        <div class="meta">${a.meta}</div>
+      </div>
+    </div>`).join('');
+
+  // Quick links
+  const qlGrid = document.getElementById('quick-links-grid');
+  qlGrid.innerHTML = QUICK_LINKS.map(q => `
+    <a class="quick-link" href="${q.url}" target="_blank" rel="noopener">
+      <span class="ic">${q.icon}</span>${q.label}
+    </a>`).join('');
+
+  // Important dates
+  const datesList = document.getElementById('important-dates-list');
+  datesList.innerHTML = IMPORTANT_DATES.map(d => `
+    <div class="date-row"><span class="date">${d.date}</span><span class="label">${d.label}</span></div>
+  `).join('') || `<div class="empty-state">No upcoming dates.</div>`;
+
+  // Contacts
+  const contactsList = document.getElementById('contacts-list');
+  contactsList.innerHTML = CONTACTS.map((c,i) => `
+    <div class="person-row">
+      <div class="avatar${i===0?'':' alt'}">${c.initials}</div>
+      <p><span class="name">${c.name}</span> — ${c.role}</p>
+    </div>`).join('');
+}
+
+// ── LIVE DATA ────────────────────────────────────
+async function loadDashboardData(){
+  try {
+    const [coursesData, studentsData] = await Promise.all([
+      graphGet(`/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.coursesListId}/items?expand=fields`),
+      graphGet(`/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.studentsListId}/items?expand=fields`),
+    ]);
+    state.courses = coursesData.value || [];
+    state.students = studentsData.value || [];
+
+    renderUpcomingClasses();
+    renderInstructorAssignments();
+    updateGreetingSummary();
+  } catch(e){
+    console.error('Dashboard data load failed:', e);
+    document.getElementById('classes-state').innerHTML =
+      `<div class="error-state">Couldn't load classes: ${e.message}</div>`;
+    document.getElementById('instructor-assignments-list').innerHTML =
+      `<div class="error-state">Couldn't load assignments.</div>`;
+  }
+
+  // Recent documents loaded separately so one failure doesn't block the rest
+  try {
+    await renderRecentDocuments();
+  } catch(e){
+    console.error('Recent documents load failed:', e);
+    document.getElementById('recent-docs-list').innerHTML =
+      `<div class="error-state">Couldn't load recent documents.</div>`;
+  }
+}
+
+function studentCountForCourse(course){
+  const courseSpId = String(fieldVal(course.fields, 'id') || course.fields.id || '');
+  const courseTitle = course.fields.Title;
+  return state.students.filter(s => {
+    const f = s.fields;
+    if (f.CourseLookupId && courseSpId && String(f.CourseLookupId) === courseSpId) return true;
+    if (typeof f.Course === 'string' && f.Course === courseTitle) return true;
+    if (typeof f.Course === 'object' && f.Course && (f.Course.LookupValue === courseTitle || f.Course.Value === courseTitle)) return true;
+    return false;
+  }).length;
+}
+
+function renderUpcomingClasses(){
+  const cutoff = daysFromNow(60);
+  const upcoming = state.courses.filter(c => {
+    const status = fieldVal(c.fields, 'Status');
+    if (status !== 'Upcoming' && status !== 'In Progress') return false;
+    if (!c.fields.StartDate) return true;
+    return new Date(c.fields.StartDate) <= cutoff;
+  }).sort((a,b) => new Date(a.fields.StartDate || 0) - new Date(b.fields.StartDate || 0));
+
+  const tbody = document.getElementById('classes-rows');
+  const table = document.getElementById('classes-table');
+  const stateEl = document.getElementById('classes-state');
+
+  if (!upcoming.length){
+    stateEl.innerHTML = `<div class="empty-state">No classes scheduled in the next 60 days.</div>`;
+    table.style.display = 'none';
+    return;
+  }
+
+  tbody.innerHTML = upcoming.map(c => {
+    const f = c.fields;
+    const courseType = fieldVal(f, 'CourseType') || f.Title || '';
+    const partner = fieldVal(f, 'Partner');
+    const instructor = fieldVal(f, 'Instructor');
+    const status = fieldVal(f, 'Status');
+    const start = f.StartDate ? formatDateShort(new Date(f.StartDate)) : '—';
+    const end = f.EndDate ? formatDateShort(new Date(f.EndDate)) : '—';
+    const count = studentCountForCourse(c);
+    return `
+      <tr>
+        <td class="course">${courseType}</td>
+        <td>${partner || '—'}</td>
+        <td>${start}</td>
+        <td>${end}</td>
+        <td>${instructor || '—'}</td>
+        <td>${count}</td>
+        <td><span class="pill ${statusPillClass(status)}">${status || '—'}</span></td>
+      </tr>`;
+  }).join('');
+
+  stateEl.style.display = 'none';
+  table.style.display = '';
+}
+
+function renderInstructorAssignments(){
+  const active = state.courses.filter(c => {
+    const status = fieldVal(c.fields, 'Status');
+    return status === 'Upcoming' || status === 'In Progress';
+  });
+
+  const byInstructor = {};
+  active.forEach(c => {
+    const instructor = fieldVal(c.fields, 'Instructor') || 'Unassigned';
+    const courseType = fieldVal(c.fields, 'CourseType') || c.fields.Title || 'Course';
+    if (!byInstructor[instructor]) byInstructor[instructor] = [];
+    byInstructor[instructor].push(courseType);
+  });
+
+  const names = Object.keys(byInstructor).sort();
+  const list = document.getElementById('instructor-assignments-list');
+
+  if (!names.length){
+    list.innerHTML = `<div class="empty-state">No active assignments right now.</div>`;
+    return;
+  }
+
+  list.innerHTML = names.map((name, i) => {
+    const initials = name.split(' ').map(p => p[0]).join('').slice(0,2).toUpperCase();
+    const courses = byInstructor[name];
+    const summary = courses.length === 1 ? courses[0] : `${courses.length} classes (${courses.join(', ')})`;
+    return `
+      <div class="person-row">
+        <div class="avatar${i===0?'':' alt'}">${initials}</div>
+        <p><span class="name">${name}</span> — ${summary}</p>
+      </div>`;
+  }).join('');
+}
+
+async function renderRecentDocuments(){
+  const list = document.getElementById('recent-docs-list');
+  const data = await graphGet(
+    `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.trainingRecordsListId}/drive/root/children?$orderby=lastModifiedDateTime desc&$top=5`
+  );
+  const items = (data.value || []).filter(i => i.file);
+
+  if (!items.length){
+    list.innerHTML = `<div class="empty-state">No recent documents.</div>`;
+    return;
+  }
+
+  const iconFor = (name) => {
+    if (/\.pdf$/i.test(name)) return '📄';
+    if (/\.(ppt|pptx)$/i.test(name)) return '📊';
+    if (/\.(doc|docx)$/i.test(name)) return '📝';
+    if (/\.(xls|xlsx|csv)$/i.test(name)) return '📈';
+    return '📁';
+  };
+
+  list.innerHTML = items.map(i => {
+    const modified = i.lastModifiedDateTime ? new Date(i.lastModifiedDateTime) : null;
+    const modBy = i.lastModifiedBy && i.lastModifiedBy.user ? i.lastModifiedBy.user.displayName : 'Unknown';
+    const when = modified ? formatDateShort(modified) : '';
+    return `
+      <div class="doc-row">
+        <span class="ic">${iconFor(i.name)}</span>
+        <div>
+          <div class="name">${i.name}</div>
+          <div class="meta">Modified by ${modBy} — ${when}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function updateGreetingSummary(){
+  const cutoff = daysFromNow(7);
+  const thisWeek = state.courses.filter(c => {
+    const status = fieldVal(c.fields, 'Status');
+    if (status !== 'Upcoming' && status !== 'In Progress') return false;
+    if (!c.fields.StartDate) return false;
+    const start = new Date(c.fields.StartDate);
+    const end = c.fields.EndDate ? new Date(c.fields.EndDate) : start;
+    const now = new Date();
+    return start <= cutoff && end >= now;
+  });
+  const instructors = new Set(thisWeek.map(c => fieldVal(c.fields, 'Instructor')).filter(Boolean));
+  const dateStr = new Date().toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+  if (thisWeek.length){
+    document.getElementById('greeting-sub').textContent =
+      `${dateStr} — ${thisWeek.length} class${thisWeek.length===1?'':'es'} running this week across ${instructors.size} instructor${instructors.size===1?'':'s'}`;
+  } else {
+    document.getElementById('greeting-sub').textContent = `${dateStr} — no classes running this week`;
+  }
+}
+
+// ── INIT — handle redirect after login ───────────
+(async()=>{
+  try {
+    await msalApp.initialize();
+    const result = await msalApp.handleRedirectPromise();
+    if(result){
+      state.user = result.account;
+      enterApp();
+    } else {
+      const accounts = msalApp.getAllAccounts();
+      if(accounts.length){
+        state.user = accounts[0];
+        msalApp.setActiveAccount(accounts[0]);
+        enterApp();
+      }
+    }
+  } catch(e){ console.error('MSAL init error', e); }
+})();
+</script>
+</body>
+</html>
