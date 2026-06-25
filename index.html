@@ -352,7 +352,7 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
 
     <!-- UPCOMING CLASSES -->
     <div class="card" style="margin-bottom:18px;">
-      <h2>Upcoming classes <span class="badge">Next 60 days</span></h2>
+      <h2>Upcoming classes <span class="badge">Next 90 days</span></h2>
       <div class="table-wrap">
         <table class="data-table" id="classes-table" style="display:none;">
           <thead>
@@ -810,7 +810,14 @@ function studentCountForCourse(course){
 // ── MY UPCOMING CLASSES (Instructor Center) ─────
 function namesMatch(a, b){
   if (!a || !b) return false;
-  return a.trim().toLowerCase() === b.trim().toLowerCase();
+  const normA = a.trim().toLowerCase();
+  const normB = b.trim().toLowerCase();
+  if (normA === normB) return true;
+  // Handle the Courses list storing only a first name (e.g. "Scott" vs "Scott Johnson")
+  const firstA = normA.split(/\s+/)[0];
+  const firstB = normB.split(/\s+/)[0];
+  if (normA === firstB || normB === firstA) return true;
+  return firstA === firstB;
 }
 
 function renderMyUpcomingClasses(){
@@ -826,7 +833,7 @@ function renderMyUpcomingClasses(){
   }
 
   const myName = state.user.name || state.user.username || '';
-  const cutoff = daysFromNow(60);
+  const cutoff = daysFromNow(90);
 
   const mine = state.courses.filter(c => {
     const status = fieldVal(c.fields, 'Status');
@@ -939,7 +946,7 @@ async function submitAvailability(){
 }
 
 function renderUpcomingClasses(){
-  const cutoff = daysFromNow(60);
+  const cutoff = daysFromNow(90);
   const upcoming = state.courses.filter(c => {
     const status = fieldVal(c.fields, 'Status');
     if (status !== 'Upcoming' && status !== 'In Progress') return false;
