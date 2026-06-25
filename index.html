@@ -414,7 +414,7 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
           <table class="data-table" id="my-classes-table" style="display:none;">
             <thead>
               <tr>
-                <th>Course</th><th>Client</th><th>Start</th><th>End</th><th>Students</th><th>Status</th>
+                <th>Course</th><th>Client</th><th>Start</th><th>End</th><th>Students</th><th>Status</th><th>Files</th>
               </tr>
             </thead>
             <tbody id="my-classes-rows"></tbody>
@@ -596,6 +596,14 @@ function fieldVal(f, key){
   const v = f && f[key];
   if (v == null) return '';
   return typeof v === 'object' ? (v.Value ?? v.LookupValue ?? '') : v;
+}
+function trainingRecordsUrl(courseTitle){
+  if (!courseTitle) return null;
+  const idParam = encodeURIComponent(`${CONFIG.sitePath}/Training Records/${courseTitle}`);
+  const viewId = 'b8a23500-52b1-4ddc-a507-c8340b89fd4e';
+  const newTargetListUrl = encodeURIComponent(`${CONFIG.sitePath}/Training Records`);
+  const viewPath = encodeURIComponent(`${CONFIG.sitePath}/Training Records/Forms/AllItems.aspx`);
+  return `https://${CONFIG.siteHostname}${CONFIG.sitePath}/Training%20Records/Forms/AllItems.aspx?id=${idParam}&viewid=${viewId}&newTargetListUrl=${newTargetListUrl}&viewpath=${viewPath}`;
 }
 function formatDateShort(d){
   return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
@@ -857,6 +865,10 @@ function renderMyUpcomingClasses(){
     const start = f.StartDate ? formatDateShort(new Date(f.StartDate)) : '—';
     const end = f.EndDate ? formatDateShort(new Date(f.EndDate)) : '—';
     const count = studentCountForCourse(c);
+    const filesUrl = trainingRecordsUrl(f.Title);
+    const filesLink = filesUrl
+      ? `<a href="${filesUrl}" target="_blank" rel="noopener" style="color:var(--blue);font-weight:600;">Open &rarr;</a>`
+      : '—';
     return `
       <tr>
         <td class="course">${courseType}</td>
@@ -865,6 +877,7 @@ function renderMyUpcomingClasses(){
         <td>${end}</td>
         <td>${count}</td>
         <td><span class="pill ${statusPillClass(status)}">${status || '—'}</span></td>
+        <td>${filesLink}</td>
       </tr>`;
   }).join('');
 
