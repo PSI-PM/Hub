@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Class Setup Guide — PSI Project Management, Inc.</title>
+<meta name="theme-color" content="#050f22">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Source+Sans+3:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --blue:#00a8ff; --blue-dark:#0078dd; --blue-light:rgba(0,140,255,0.12);
+  --green:#00c8a8; --green-light:rgba(0,180,160,0.12);
+  --yellow:#e0a030; --yellow-light:rgba(220,150,30,0.12);
+  --red:#ff6060; --red-light:rgba(255,80,80,0.12);
+  --bg:#050f22;
+  --gray-100:rgba(255,255,255,0.05); --gray-200:rgba(0,140,255,0.2);
+  --gray-400:#7ab0d0; --gray-500:#5a8aaa; --gray-700:#90c8f0; --gray-900:#e0f0ff;
+  --radius:10px; --radius-lg:16px;
+  --card-bg:rgba(0,60,180,0.08); --card-border:rgba(0,140,255,0.25);
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body {
+  font-family:"Source Sans 3",sans-serif; background:var(--bg); color:var(--gray-900);
+  min-height:100vh; -webkit-text-size-adjust:100%;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 0%, rgba(0,90,255,0.22) 0%, transparent 60%),
+    linear-gradient(180deg,#040d1c 0%,#050f22 40%,#04091a 100%);
+  background-attachment:fixed;
+}
+h1,h2,h3 { font-family:"Playfair Display",serif; color:var(--gray-900); }
+a { color:var(--blue); text-decoration:none; }
+a:hover { text-decoration:underline; }
+
+.page { max-width:840px; margin:0 auto; padding:40px 24px 80px; }
+
+.back-link { display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--gray-500); margin-bottom:24px; }
+.back-link:hover { color:var(--blue); text-decoration:none; }
+
+.page-eyebrow { font-size:11px; color:var(--blue); letter-spacing:0.1em; text-transform:uppercase; font-weight:600; margin-bottom:10px; }
+.page-title { font-size:30px; margin-bottom:8px; }
+.page-sub { font-size:14px; color:var(--gray-500); margin-bottom:32px; line-height:1.6; max-width:620px; }
+
+.callout {
+  background:var(--card-bg); border:0.5px solid var(--card-border); border-radius:var(--radius-lg);
+  padding:18px 22px; margin-bottom:32px; display:flex; gap:14px; align-items:flex-start;
+}
+.callout .ic { font-size:22px; flex-shrink:0; }
+.callout p { font-size:13.5px; color:var(--gray-400); line-height:1.6; }
+.callout strong { color:var(--gray-900); }
+.callout.danger { border-color:rgba(255,96,96,0.35); background:var(--red-light); }
+.callout.danger p { color:#ffb0b0; }
+.callout.danger strong { color:#ffd0d0; }
+
+.timeline { position:relative; padding-left:28px; }
+.timeline::before {
+  content:''; position:absolute; left:8px; top:6px; bottom:6px; width:2px;
+  background:linear-gradient(180deg, var(--blue), rgba(0,140,255,0.15));
+}
+
+.tl-step { position:relative; margin-bottom:30px; }
+.tl-step::before {
+  content:''; position:absolute; left:-28px; top:4px; width:16px; height:16px; border-radius:50%;
+  background:var(--bg); border:2px solid var(--blue); box-shadow:0 0 10px rgba(0,160,255,0.4);
+}
+.tl-step.escalation::before { border-color:var(--yellow); box-shadow:0 0 10px rgba(220,150,30,0.4); }
+
+.tl-when {
+  display:inline-block; font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase;
+  color:var(--blue); background:var(--blue-light); border:0.5px solid rgba(0,160,255,0.3);
+  padding:4px 12px; border-radius:20px; margin-bottom:10px;
+}
+.tl-step.escalation .tl-when { color:var(--yellow); background:var(--yellow-light); border-color:rgba(220,150,30,0.3); }
+
+.tl-card {
+  background:var(--card-bg); border:0.5px solid var(--card-border); border-radius:var(--radius-lg);
+  padding:20px 22px;
+}
+.tl-card h3 { font-size:17px; margin-bottom:12px; }
+.tl-card ul { list-style:none; display:flex; flex-direction:column; gap:10px; }
+.tl-card li { font-size:13.5px; color:var(--gray-400); line-height:1.55; display:flex; gap:10px; align-items:flex-start; }
+.tl-card li::before { content:'—'; color:var(--blue); flex-shrink:0; }
+.tl-card li strong { color:var(--gray-900); font-weight:600; }
+.tl-card .note {
+  margin-top:12px; padding:10px 14px; border-radius:8px; background:rgba(255,255,255,0.03);
+  border:0.5px solid var(--gray-200); font-size:12.5px; color:var(--gray-500); line-height:1.5;
+}
+.tl-card .note strong { color:var(--gray-700); }
+
+.privacy-box {
+  margin:40px 0; padding:20px 24px; border-radius:var(--radius-lg);
+  background:var(--red-light); border:0.5px solid rgba(255,96,96,0.35);
+}
+.privacy-box h3 { font-size:16px; color:#ffd0d0; margin-bottom:10px; display:flex; align-items:center; gap:8px; }
+.privacy-box p { font-size:13.5px; color:#ffc0c0; line-height:1.6; margin-bottom:8px; }
+.privacy-box ul { margin-top:8px; padding-left:18px; }
+.privacy-box li { font-size:13.5px; color:#ffc0c0; line-height:1.7; }
+
+.section-label {
+  font-size:12px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase;
+  color:var(--gray-500); margin:40px 0 16px;
+}
+
+.quick-ref-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; }
+.quick-ref-card {
+  background:var(--card-bg); border:0.5px solid var(--card-border); border-radius:var(--radius);
+  padding:16px 18px;
+}
+.quick-ref-card h4 { font-size:13px; color:var(--gray-700); margin-bottom:6px; font-family:"Source Sans 3",sans-serif; font-weight:600; }
+.quick-ref-card p { font-size:12.5px; color:var(--gray-500); line-height:1.5; }
+
+footer.guide-footer {
+  margin-top:48px; padding-top:20px; border-top:0.5px solid var(--gray-200);
+  font-size:11.5px; color:var(--gray-500); text-align:center;
+}
+
+@media (max-width:640px) {
+  .page { padding:28px 16px 60px; }
+  .timeline { padding-left:22px; }
+  .tl-step::before { left:-22px; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <a class="back-link" href="javascript:history.back()">&larr; Back to Instructor Center</a>
+
+  <div class="page-eyebrow">Class Management</div>
+  <h1 class="page-title">Class Setup Guide</h1>
+  <p class="page-sub">The standard process for getting a class ready to launch — from the roster pull six days out through day-of escalation if a student can't be reached. This process is the same for every course (PMP, CAPM, Practical, CPMAI).</p>
+
+  <div class="callout">
+    <span class="ic">📅</span>
+    <p><strong>Timing assumption:</strong> this guide assumes a Monday class start, which is the standard PSI schedule. "Day 6" through "Day 5" below count backward from that Monday — adjust the calendar dates if a class starts on a different day, but keep the same number of days of lead time.</p>
+  </div>
+
+  <div class="timeline">
+
+    <div class="tl-step">
+      <div class="tl-when">6 days before class</div>
+      <div class="tl-card">
+        <h3>Pull the roster &amp; kick off prep</h3>
+        <ul>
+          <li>Go to <strong>Training Records</strong> in SharePoint &rarr; click your <strong>class name</strong> &rarr; click <strong>Student Files</strong>. This is the simplified view with student names and emails.</li>
+          <li>Email that roster to the <strong>LMS Administrator (Amy Hamilton)</strong> so she can upload the students into the correct course in the LMS.</li>
+          <li>Verify you have the <strong>current version of the slide deck</strong> for this course.</li>
+          <li>Create the <strong>Zoom meeting</strong> using your own Zoom account.</li>
+        </ul>
+        <div class="note"><strong>Don't forget:</strong> add <strong>Roy and Scott as Co-Hosts</strong> on the Zoom meeting for every class, so either can step in to teach in an emergency.</div>
+      </div>
+    </div>
+
+    <div class="tl-step">
+      <div class="tl-when">5 days before class — deadline</div>
+      <div class="tl-card">
+        <h3>Send the Welcome Email &amp; calendar invite</h3>
+        <ul>
+          <li>Send the <strong>Welcome Email</strong> first. Start from the template in the Student Communication folder — personalizing it is fine.</li>
+          <li>Separately, send the <strong>Outlook calendar invite</strong> for the Zoom session. Don't rely on the email alone for the Zoom link — the calendar invite is what lets you track acceptance.</li>
+          <li>On <strong>both</strong> the email and the calendar invite: put <strong>Roy and Scott in CC</strong>, and put <strong>all students in BCC</strong>.</li>
+        </ul>
+        <div class="note">See the privacy note below — this BCC step is required, not optional.</div>
+      </div>
+    </div>
+
+    <div class="tl-step escalation">
+      <div class="tl-when">Days 4–2 before class</div>
+      <div class="tl-card">
+        <h3>Track acceptance &amp; send reminders</h3>
+        <ul>
+          <li>Each day, check Outlook for who has <strong>accepted</strong> the calendar invite (a quick visual check — no separate tracking sheet needed).</li>
+          <li>For anyone who hasn't accepted yet, send a <strong>short daily reminder</strong> — just a nudge to accept, not a full re-send of class details.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="tl-step escalation">
+      <div class="tl-when">Day before class (Sunday)</div>
+      <div class="tl-card">
+        <h3>Escalate non-responders</h3>
+        <ul>
+          <li>Email <strong>Roy and/or Scott</strong> the list of students who still haven't accepted or responded.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="tl-step escalation">
+      <div class="tl-when">Day of class (Monday)</div>
+      <div class="tl-card">
+        <h3>Phone follow-up</h3>
+        <ul>
+          <li><strong>Roy, Scott, or an Admin Manager</strong> will personally call the students who haven't responded, to try to make contact before/as class starts.</li>
+          <li>If a student still can't be reached and doesn't show up, the <strong>instructor</strong> documents that outreach was attempted when informing the customer point of contact — note that PSI tried to reach the student and they didn't show.</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="privacy-box">
+    <h3>🔒 Privacy requirement — every time</h3>
+    <p>Students must never be able to see another student's name or email address. This applies to the Welcome Email and the Outlook calendar invite, with no exceptions.</p>
+    <ul>
+      <li><strong>Students go in BCC</strong> — never To, never CC.</li>
+      <li><strong>Roy and Scott go in CC</strong> — they're staff, so visibility between them and the instructor is fine.</li>
+    </ul>
+  </div>
+
+  <div class="section-label">Quick reference</div>
+  <div class="quick-ref-grid">
+    <div class="quick-ref-card">
+      <h4>Roster source</h4>
+      <p>Training Records &rarr; [Class Name] &rarr; Student Files</p>
+    </div>
+    <div class="quick-ref-card">
+      <h4>LMS uploads</h4>
+      <p>Email roster to Amy Hamilton (LMS Administrator)</p>
+    </div>
+    <div class="quick-ref-card">
+      <h4>Zoom Co-Hosts</h4>
+      <p>Always Roy + Scott, every class, no exceptions</p>
+    </div>
+    <div class="quick-ref-card">
+      <h4>Email/invite recipients</h4>
+      <p>Roy + Scott in CC · Students in BCC</p>
+    </div>
+    <div class="quick-ref-card">
+      <h4>Welcome Email deadline</h4>
+      <p>5 days before class — no later</p>
+    </div>
+    <div class="quick-ref-card">
+      <h4>Escalation contact</h4>
+      <p>Roy and/or Scott, by end of day Sunday</p>
+    </div>
+  </div>
+
+  <footer class="guide-footer">PSI Project Management Inc. · Class Setup Guide · Same process for all courses (PMP, CAPM, Practical, CPMAI)</footer>
+
+</div>
+</body>
+</html>
