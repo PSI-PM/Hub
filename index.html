@@ -144,6 +144,17 @@ button { cursor:pointer; font-family:inherit; }
 }
 .section-label-sm:first-child { margin-top:0; }
 
+/* ── PENDING / NOT-YET-BUILT SECTIONS ── */
+.card.pending { border-style:dashed; opacity:0.85; }
+.pending-tag {
+  display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700;
+  letter-spacing:0.04em; text-transform:uppercase; color:var(--yellow);
+  background:var(--yellow-light); border:0.5px solid rgba(220,150,30,0.3);
+  padding:4px 11px; border-radius:20px;
+}
+.pending-body { font-size:13px; color:var(--gray-500); line-height:1.6; margin-top:12px; }
+.pending-body strong { color:var(--gray-700); }
+
 /* ── MAIN ── */
 #screen-app {
   background:
@@ -326,6 +337,7 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
   <nav class="tab-nav">
     <button class="tab-btn active" data-tab="home" onclick="switchTab('home')">Home</button>
     <button class="tab-btn" data-tab="instructor-center" onclick="switchTab('instructor-center')">Instructor Center</button>
+    <button class="tab-btn" data-tab="operations-center" onclick="switchTab('operations-center')">Operations Center</button>
   </nav>
 
   <main class="app-main">
@@ -476,6 +488,56 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
 
     </div>
     <!-- end tab-instructor-center -->
+
+    <div class="tab-content" id="tab-operations-center">
+
+      <div class="hero-card" style="margin-bottom:18px;">
+        <h1 style="font-size:22px;">Operations Center</h1>
+        <p style="margin-top:4px;">Client, financial, and administrative operations — built out section by section as the underlying data gets organized.</p>
+      </div>
+
+      <!-- CLIENT CONTACTS -->
+      <div class="card pending" style="margin-bottom:18px;">
+        <h2>Client contacts <span class="pending-tag">⏳ Pending</span></h2>
+        <div class="pending-body">
+          Client relationship info currently lives in an Excel sheet, not SharePoint. This section will go live once that data is migrated into a real SharePoint list — same pattern as Courses, Students, and Availability.
+        </div>
+      </div>
+
+      <!-- CONTRACTS & MOUS -->
+      <div class="card pending" style="margin-bottom:18px;">
+        <h2>Contracts &amp; MOUs <span class="pending-tag">⏳ Pending</span></h2>
+        <div class="pending-body">
+          No centralized document library exists for these yet. This section will go live once a Contracts/MOUs library is set up in SharePoint.
+        </div>
+      </div>
+
+      <!-- FINANCE MANAGEMENT -->
+      <div class="card pending" style="margin-bottom:18px;">
+        <h2>Finance management <span class="pending-tag">⏳ Pending</span></h2>
+        <div class="pending-body">
+          Scope and data source still to be defined with <strong>Amber Johnson (Finance Manager)</strong>. This section will go live once that's worked out.
+        </div>
+      </div>
+
+      <!-- VENDOR DOCUMENTS -->
+      <div class="card pending" style="margin-bottom:18px;">
+        <h2>Vendor documents <span class="pending-tag">⏳ Not yet built</span></h2>
+        <div class="pending-body">
+          Placeholder — needs a real conversation about where vendor documents currently live and what instructors/staff actually need from this section.
+        </div>
+      </div>
+
+      <!-- INTERNAL POLICIES -->
+      <div class="card pending">
+        <h2>Internal policies &amp; procedures <span class="pending-tag">⏳ Not yet built</span></h2>
+        <div class="pending-body">
+          Placeholder — needs a real conversation about what exists today and where it should live.
+        </div>
+      </div>
+
+    </div>
+    <!-- end tab-operations-center -->
 
   </main>
 </div>
