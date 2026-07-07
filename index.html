@@ -722,6 +722,22 @@ async function graphGet(path){
   return res.json();
 }
 
+// Follows @odata.nextLink so we get ALL items, not just the first 200.
+// Graph pages SharePoint list items in batches; graphGet only returns page 1.
+async function graphGetAll(path){
+  const token = await getToken();
+  let items = [];
+  let url = `https://graph.microsoft.com/v1.0${path}`;
+  while(url){
+    const res = await fetch(url, { headers:{ Authorization:`Bearer ${token}` }});
+    if(!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    items = items.concat(data.value || []);
+    url = data['@odata.nextLink'] || null;  // absolute URL — fetch as-is
+  }
+  return { value: items };
+}
+
 async function graphPost(path, body){
   const token = await getToken();
   const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
@@ -835,8 +851,8 @@ function switchTab(tabName){
 async function loadDashboardData(){
   try {
     const [coursesData, studentsData] = await Promise.all([
-      graphGet(`/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.coursesListId}/items?expand=fields`),
-      graphGet(`/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.studentsListId}/items?expand=fields`),
+      graphGetAll(`/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.coursesListId}/items?expand=fields`),
+      graphGetAll(`/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.studentsListId}/items?expand=fields`),
     ]);
     state.courses = coursesData.value || [];
     state.students = studentsData.value || [];
@@ -951,7 +967,7 @@ function renderMyUpcomingClasses(){
 async function loadMyAvailability(){
   const list = document.getElementById('my-availability-list');
   try {
-    const data = await graphGet(
+    const data = await graphGetAll(
       `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.availabilityListId}/items?expand=fields`
     );
     const myName = state.user.name || state.user.username || '';
@@ -1034,7 +1050,7 @@ function renderUpcomingClasses(){
   const stateEl = document.getElementById('classes-state');
 
   if (!upcoming.length){
-    stateEl.innerHTML = `<div class="empty-state">No classes scheduled in the next 60 days.</div>`;
+    stateEl.innerHTML = `<div class="empty-state">No classes scheduled in the next 90 days.</div>`;
     table.style.display = 'none';
     return;
   }
@@ -1100,6 +1116,7 @@ function renderInstructorAssignments(){
 
 async function renderRecentDocuments(){
   const list = document.getElementById('recent-docs-list');
+  // Intentionally NOT paginated: $top=5 + ordering — we only want the 5 newest files.
   const data = await graphGet(
     `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.trainingRecordsListId}/drive/root/children?$orderby=lastModifiedDateTime desc&$top=5`
   );
