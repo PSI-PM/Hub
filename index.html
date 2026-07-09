@@ -1340,28 +1340,37 @@ async function submitSingleStudent(){
   btn.textContent = 'Uploading…';
   showLoading(true);
   try {
-    // Build the Excel file matching the exact Roster Drop Zone format
-    const headers = ['First Name', 'Last Name', 'Email', 'Phone', 'Course Name', 'Start Date', 'End Date', 'Course Type'];
-    const row = [firstName, lastName, email, phone, courseTitle, toExcelDate(startDate), toExcelDate(endDate), courseType];
+    // Build Excel file using a pre-built openpyxl template that contains
+    // a real Excel Table named "Students". SheetJS opens the template,
+    // replaces the placeholder row with real data, preserving the table.
+    const ROSTER_TEMPLATE_B64 = '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';
 
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet([headers, row]);
+    function b64ToUint8(b64str){
+      const bin = atob(b64str);
+      const arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      return arr;
+    }
 
-    // Add a proper Excel Table named Students over the data range
-    ws['!ref'] = 'A1:H2';
-    if (!ws['!tables']) ws['!tables'] = [];
-    ws['!tables'].push({
-      name: 'Students',
-      ref: 'A1:H2',
-      headerRow: true,
-      totalsRow: false,
-      style: { themeIndex: 2, showFirstColumn: false, showLastColumn: false, showRowStripes: true, showColumnStripes: false },
-      columns: headers.map(h => ({ name: h })),
+    const templateBytes = b64ToUint8(ROSTER_TEMPLATE_B64);
+    const wb = XLSX.read(templateBytes, { type: 'array', cellStyles: true });
+    const ws = wb.Sheets['Master Roster'];
+
+    // Replace placeholder row (row 2) with real student data
+    const colMap = { A: firstName, B: lastName, C: email, D: phone,
+                     E: courseTitle, F: toExcelDate(startDate), G: toExcelDate(endDate), H: courseType };
+    Object.entries(colMap).forEach(([col, val]) => {
+      const cellRef = `${col}2`;
+      if (ws[cellRef]) {
+        ws[cellRef].v = val;
+        ws[cellRef].t = typeof val === 'number' ? 'n' : 's';
+        delete ws[cellRef].w;
+      } else {
+        ws[cellRef] = { v: val, t: typeof val === 'number' ? 'n' : 's' };
+      }
     });
 
-    XLSX.utils.book_append_sheet(wb, ws, 'Master Roster');
-
-    const wbBuf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const wbBuf = XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellStyles: true });
 
     // Upload to Roster Drop Zone
     const token = await getToken();
