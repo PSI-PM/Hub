@@ -178,6 +178,31 @@ button { cursor:pointer; font-family:inherit; }
 .upload-actions { display:flex; gap:10px; margin-top:16px; align-items:center; }
 .upload-status { font-size:12.5px; color:var(--gray-500); }
 
+/* ── CUSTOM DROPDOWN ── */
+.custom-select { position:relative; user-select:none; }
+.custom-select-trigger {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 12px; border-radius:8px; border:1.5px solid var(--card-border);
+  background:rgba(0,40,120,0.1); color:var(--gray-900); font-size:13.5px; cursor:pointer;
+  transition:border-color 0.15s;
+}
+.custom-select-trigger:hover { border-color:rgba(0,180,255,0.5); }
+.custom-select-trigger.open { border-color:rgba(0,180,255,0.5); border-bottom-left-radius:0; border-bottom-right-radius:0; }
+.custom-select-arrow { font-size:11px; color:var(--gray-500); transition:transform 0.15s; }
+.custom-select-trigger.open .custom-select-arrow { transform:rotate(180deg); }
+.custom-select-options {
+  display:none; position:absolute; top:100%; left:0; right:0; z-index:200;
+  background:#0a1a3a; border:1.5px solid rgba(0,180,255,0.5); border-top:none;
+  border-bottom-left-radius:8px; border-bottom-right-radius:8px;
+  max-height:220px; overflow-y:auto;
+}
+.custom-select-options.open { display:block; }
+.custom-select-option {
+  padding:10px 12px; font-size:13px; color:var(--gray-400); cursor:pointer; transition:background 0.1s;
+}
+.custom-select-option:hover { background:rgba(0,140,255,0.15); color:var(--gray-900); }
+.custom-select-option.selected { color:var(--blue); background:rgba(0,140,255,0.1); }
+
 /* ── DUPLICATE ROSTER BANNER ── */
   background:var(--yellow-light); border:0.5px solid rgba(220,150,30,0.35); border-radius:var(--radius-lg);
   padding:16px 20px; margin-bottom:18px;
@@ -555,10 +580,15 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
           <p style="font-size:12.5px;color:var(--gray-500);margin-bottom:14px;">For a single add-in to an existing class.</p>
           <div class="form-grid" style="grid-template-columns:1fr;">
             <div class="form-field">
-              <label for="single-course">Course</label>
-              <select id="single-course" style="padding:10px 12px;border-radius:8px;border:1.5px solid var(--card-border);background:rgba(0,40,120,0.1);color:var(--gray-900);font-size:13.5px;">
-                <option value="">Loading courses…</option>
-              </select>
+              <label>Course</label>
+              <div class="custom-select" id="single-course-wrap">
+                <div class="custom-select-trigger" id="single-course-trigger" onclick="toggleCourseDropdown()">
+                  <span id="single-course-label">Select a course…</span>
+                  <span class="custom-select-arrow">▾</span>
+                </div>
+                <div class="custom-select-options" id="single-course-options"></div>
+              </div>
+              <input type="hidden" id="single-course">
             </div>
             <div class="form-field">
               <label for="single-first">First name</label>
@@ -924,16 +954,72 @@ function switchTab(tabName){
 }
 
 function populateSingleCourseDropdown(){
-  const select = document.getElementById('single-course');
-  if (!select || !state.courses.length) return;
-  const sorted = [...state.courses].sort((a,b) => (a.fields.Title||'').localeCompare(b.fields.Title||''));
-  select.innerHTML = '<option value="">Select a course…</option>' + sorted.map(c => {
+  const optionsEl = document.getElementById('single-course-options');
+  if (!optionsEl || !state.courses.length) return;
+
+  // Only show active courses — no point adding a student to a completed class
+  const active = state.courses
+    .filter(c => { const s = fieldVal(c.fields, 'Status'); return s === 'Upcoming' || s === 'In Progress'; })
+    .sort((a,b) => (a.fields.Title||'').localeCompare(b.fields.Title||''));
+
+  if (!active.length){
+    optionsEl.innerHTML = '<div class="custom-select-option" style="opacity:0.5;cursor:default;">No active courses</div>';
+    return;
+  }
+
+  optionsEl.innerHTML = active.map(c => {
     const title = c.fields.Title || '';
     const courseType = fieldVal(c.fields, 'CourseType') || '';
-    const courseSpId = String(c.fields.id || '');
-    return `<option value="${c.id}" data-title="${title}" data-coursetype="${courseType}" data-spid="${courseSpId}" data-startdate="${c.fields.StartDate||''}" data-enddate="${c.fields.EndDate||''}">${title}${courseType ? ' — ' + courseType : ''}</option>`;
+    const label = `${title}${courseType ? ' — ' + courseType : ''}`;
+    return `<div class="custom-select-option"
+      data-value="${c.id}"
+      data-title="${title}"
+      data-coursetype="${courseType}"
+      data-spid="${String(c.fields.id||'')}"
+      data-startdate="${c.fields.StartDate||''}"
+      data-enddate="${c.fields.EndDate||''}"
+      onclick="selectCourseOption(this)">${label}</div>`;
   }).join('');
 }
+
+function toggleCourseDropdown(){
+  const trigger = document.getElementById('single-course-trigger');
+  const options = document.getElementById('single-course-options');
+  const isOpen = options.classList.contains('open');
+  trigger.classList.toggle('open', !isOpen);
+  options.classList.toggle('open', !isOpen);
+}
+
+function selectCourseOption(el){
+  // Store values on the hidden input for submitSingleStudent to read
+  const hidden = document.getElementById('single-course');
+  hidden.value = el.dataset.value;
+  hidden.dataset.title = el.dataset.title;
+  hidden.dataset.coursetype = el.dataset.coursetype;
+  hidden.dataset.spid = el.dataset.spid;
+  hidden.dataset.startdate = el.dataset.startdate;
+  hidden.dataset.enddate = el.dataset.enddate;
+
+  // Update trigger label
+  document.getElementById('single-course-label').textContent = el.textContent;
+
+  // Mark selected
+  document.querySelectorAll('#single-course-options .custom-select-option').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+
+  // Close
+  document.getElementById('single-course-trigger').classList.remove('open');
+  document.getElementById('single-course-options').classList.remove('open');
+}
+
+// Close dropdown if user clicks outside
+document.addEventListener('click', (e) => {
+  const wrap = document.getElementById('single-course-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('single-course-trigger')?.classList.remove('open');
+    document.getElementById('single-course-options')?.classList.remove('open');
+  }
+});
 
 // ── LIVE DATA ────────────────────────────────────
 async function loadDashboardData(){
@@ -1204,15 +1290,14 @@ async function submitRoster(){
 }
 
 async function submitSingleStudent(){
-  const courseSelect = document.getElementById('single-course');
+  const courseInput = document.getElementById('single-course');
   const firstEl = document.getElementById('single-first');
   const lastEl = document.getElementById('single-last');
   const emailEl = document.getElementById('single-email');
   const phoneEl = document.getElementById('single-phone');
   const btn = document.getElementById('single-add-btn');
 
-  const selectedOption = courseSelect.options[courseSelect.selectedIndex];
-  if (!courseSelect.value || !selectedOption){
+  if (!courseInput.value){
     showToast('Please select a course.', 'error');
     return;
   }
@@ -1221,9 +1306,8 @@ async function submitSingleStudent(){
     return;
   }
 
-  const courseTitle = selectedOption.dataset.title;
-  const courseType = selectedOption.dataset.coursetype;
-  const courseSpId = selectedOption.dataset.spid;
+  const courseTitle = courseInput.dataset.title;
+  const courseType = courseInput.dataset.coursetype;
   const fullName = `${firstEl.value.trim()} ${lastEl.value.trim()}`;
 
   btn.disabled = true;
@@ -1239,8 +1323,8 @@ async function submitSingleStudent(){
         PhoneNumber: phoneEl.value.trim(),
         CourseType: courseType,
         LegacyCourseCode: courseTitle,
-        StartDate: selectedOption.dataset.startdate || null,
-        EndDate: selectedOption.dataset.enddate || null,
+        StartDate: courseInput.dataset.startdate || null,
+        EndDate: courseInput.dataset.enddate || null,
         CompletionStatus: 'Enrolled',
       }}
     );
@@ -1250,7 +1334,11 @@ async function submitSingleStudent(){
     lastEl.value = '';
     emailEl.value = '';
     phoneEl.value = '';
-    courseSelect.value = '';
+    courseInput.value = '';
+    courseInput.dataset.title = '';
+    courseInput.dataset.coursetype = '';
+    document.getElementById('single-course-label').textContent = 'Select a course…';
+    document.querySelectorAll('#single-course-options .custom-select-option').forEach(o => o.classList.remove('selected'));
   } catch(e){
     showToast('Failed to add student: ' + e.message, 'error');
   }
