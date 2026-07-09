@@ -923,6 +923,18 @@ function switchTab(tabName){
   }
 }
 
+function populateSingleCourseDropdown(){
+  const select = document.getElementById('single-course');
+  if (!select || !state.courses.length) return;
+  const sorted = [...state.courses].sort((a,b) => (a.fields.Title||'').localeCompare(b.fields.Title||''));
+  select.innerHTML = '<option value="">Select a course…</option>' + sorted.map(c => {
+    const title = c.fields.Title || '';
+    const courseType = fieldVal(c.fields, 'CourseType') || '';
+    const courseSpId = String(c.fields.id || '');
+    return `<option value="${c.id}" data-title="${title}" data-coursetype="${courseType}" data-spid="${courseSpId}" data-startdate="${c.fields.StartDate||''}" data-enddate="${c.fields.EndDate||''}">${title}${courseType ? ' — ' + courseType : ''}</option>`;
+  }).join('');
+}
+
 // ── LIVE DATA ────────────────────────────────────
 async function loadDashboardData(){
   try {
@@ -940,8 +952,6 @@ async function loadDashboardData(){
       renderMyUpcomingClasses();
     }
     populateSingleCourseDropdown();
-    if (document.getElementById('tab-operations-center').classList.contains('active')) {
-    }
   } catch(e){
     console.error('Dashboard data load failed:', e);
     document.getElementById('classes-state').innerHTML =
