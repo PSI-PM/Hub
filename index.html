@@ -1060,14 +1060,10 @@ function studentCountForCourse(course){
   const courseTitle = course.fields.Title;
   return state.students.filter(s => {
     const f = s.fields;
-    // Primary join: LegacyCourseCode on the student matches the course Title
-    // (This is what the Power Automate flow writes when it processes roster files)
     if (f.LegacyCourseCode && f.LegacyCourseCode === courseTitle) return true;
-    // Fallback: CourseLookupId or Course field for students added via Hub single-add
+    if (f.Course && f.Course === courseTitle) return true;
     const courseSpId = String(course.fields.id || '');
     if (f.CourseLookupId && courseSpId && String(f.CourseLookupId) === courseSpId) return true;
-    if (typeof f.Course === 'string' && f.Course === courseTitle) return true;
-    if (typeof f.Course === 'object' && f.Course && (f.Course.LookupValue === courseTitle || f.Course.Value === courseTitle)) return true;
     return false;
   }).length;
 }
@@ -1322,7 +1318,7 @@ async function submitSingleStudent(){
         Email: emailEl.value.trim(),
         PhoneNumber: phoneEl.value.trim(),
         CourseType: courseType,
-        LegacyCourseCode: courseTitle,
+        Course: courseTitle,
         StartDate: courseInput.dataset.startdate || null,
         EndDate: courseInput.dataset.enddate || null,
         CompletionStatus: 'Enrolled',
