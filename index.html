@@ -1365,7 +1365,8 @@ async function submitSingleStudent(){
 
     // Upload to Roster Drop Zone
     const token = await getToken();
-    const fileName = `SingleAdd_${lastName}_${firstName}_${courseTitle}.xlsx`.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const timestamp = Date.now();
+    const fileName = `SingleAdd_${lastName}_${firstName}_${courseTitle}_${timestamp}.xlsx`.replace(/[^a-zA-Z0-9._-]/g, '_');
     const filePath = `${CONFIG.rosterDropZonePath}/${fileName}`;
     const res = await fetch(
       `https://graph.microsoft.com/v1.0/users/${CONFIG.rosterDropZoneOwner}/drive/root:/${encodeURIComponent(filePath)}:/content`,
