@@ -155,6 +155,40 @@ button { cursor:pointer; font-family:inherit; }
 .pending-body { font-size:13px; color:var(--gray-500); line-height:1.6; margin-top:12px; }
 .pending-body strong { color:var(--gray-700); }
 
+/* ── DROP ZONE ── */
+.drop-zone {
+  border:2px dashed var(--card-border); border-radius:var(--radius-lg);
+  padding:36px 24px; text-align:center; cursor:pointer; transition:all 0.15s;
+  background:rgba(0,140,255,0.04);
+}
+.drop-zone:hover, .drop-zone.dragover { border-color:rgba(0,180,255,0.55); background:rgba(0,100,255,0.1); }
+.drop-zone .dz-icon { font-size:32px; margin-bottom:10px; }
+.drop-zone .dz-title { font-size:14px; font-weight:600; color:var(--gray-900); margin-bottom:4px; }
+.drop-zone .dz-sub { font-size:12px; color:var(--gray-500); }
+.drop-zone input[type="file"] { display:none; }
+
+.dz-file-chip {
+  display:flex; align-items:center; gap:10px; padding:12px 16px; margin-top:14px;
+  background:var(--card-bg); border:0.5px solid var(--card-border); border-radius:var(--radius);
+}
+.dz-file-chip .name { font-size:13px; color:var(--gray-900); flex:1; word-break:break-all; }
+.dz-file-chip .remove { font-size:12px; color:var(--gray-500); cursor:pointer; background:none; border:none; }
+.dz-file-chip .remove:hover { color:var(--red); }
+
+.upload-actions { display:flex; gap:10px; margin-top:16px; align-items:center; }
+.upload-status { font-size:12.5px; color:var(--gray-500); }
+
+/* ── DUPLICATE ROSTER BANNER ── */
+  background:var(--yellow-light); border:0.5px solid rgba(220,150,30,0.35); border-radius:var(--radius-lg);
+  padding:16px 20px; margin-bottom:18px;
+}
+  display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+  padding:10px 12px; border-radius:var(--radius); background:rgba(255,255,255,0.03); margin-bottom:8px;
+}
+  padding:7px 16px; border-radius:8px; border:none; background:var(--yellow); color:#1a1200;
+  font-size:12.5px; font-weight:700; cursor:pointer; white-space:nowrap;
+}
+
 /* ── MAIN ── */
 #screen-app {
   background:
@@ -349,7 +383,6 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
       <p id="greeting-sub">Loading today's overview…</p>
     </div>
 
-
     <!-- ANNOUNCEMENTS + QUICK LINKS -->
     <div class="row two-1-6-1">
       <div class="card">
@@ -496,8 +529,61 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
         <p style="margin-top:4px;">Client, financial, and administrative operations — built out section by section as the underlying data gets organized.</p>
       </div>
 
+      <!-- STUDENT ENROLLMENT -->
+      <div class="row two-1-6-1">
+
+        <div class="card">
+          <h2>Add students by roster</h2>
+          <p style="font-size:12.5px;color:var(--gray-500);margin-bottom:14px;">Drop any roster file here — Excel, CSV, or PDF. It will be uploaded directly into the Roster Drop Zone folder, where Power Automate will process it and add the students to the correct course automatically.</p>
+
+          <div class="drop-zone" id="roster-drop-zone" onclick="document.getElementById('roster-file-input').click()">
+            <div class="dz-icon">📂</div>
+            <div class="dz-title">Drag a roster file here, or click to browse</div>
+            <div class="dz-sub">Any file type accepted</div>
+            <input type="file" id="roster-file-input">
+          </div>
+
+          <div id="roster-file-chip"></div>
+          <div class="upload-actions" id="roster-actions" style="display:none;">
+            <button class="btn-submit-form" id="roster-submit-btn" onclick="submitRoster()">Upload to Roster Drop Zone</button>
+            <span class="upload-status" id="roster-status"></span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Add one student</h2>
+          <p style="font-size:12.5px;color:var(--gray-500);margin-bottom:14px;">For a single add-in to an existing class.</p>
+          <div class="form-grid" style="grid-template-columns:1fr;">
+            <div class="form-field">
+              <label for="single-course">Course</label>
+              <select id="single-course" style="padding:10px 12px;border-radius:8px;border:1.5px solid var(--card-border);background:rgba(0,40,120,0.1);color:var(--gray-900);font-size:13.5px;">
+                <option value="">Loading courses…</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="single-first">First name</label>
+              <input type="text" id="single-first">
+            </div>
+            <div class="form-field">
+              <label for="single-last">Last name</label>
+              <input type="text" id="single-last">
+            </div>
+            <div class="form-field">
+              <label for="single-email">Email</label>
+              <input type="email" id="single-email">
+            </div>
+            <div class="form-field">
+              <label for="single-phone">Phone (optional)</label>
+              <input type="text" id="single-phone">
+            </div>
+          </div>
+          <button class="btn-submit-form" id="single-add-btn" onclick="submitSingleStudent()">Add student</button>
+        </div>
+
+      </div>
+
       <!-- CLIENT CONTACTS -->
-      <div class="card pending" style="margin-bottom:18px;">
+      <div class="card pending" style="margin-bottom:18px; margin-top:18px;">
         <h2>Client contacts <span class="pending-tag">⏳ Pending</span></h2>
         <div class="pending-body">
           Client relationship info currently lives in an Excel sheet, not SharePoint. This section will go live once that data is migrated into a real SharePoint list — same pattern as Courses, Students, and Availability.
@@ -558,6 +644,8 @@ const CONFIG = {
   attendanceListId: 'd464aa77-7218-49b3-8131-aede92fd8d29',
   trainingRecordsListId: 'f2f81d00-cb73-4f62-b419-6935d3f54a28',
   availabilityListId: '0cd591e3-9e8b-4619-935c-1a2e45b24402',
+  rosterDropZoneOwner: 'scottj@psipm.com',
+  rosterDropZonePath: 'Roster Drop Zone',
 };
 
 const SCOPES = ['Sites.ReadWrite.All','User.Read'];
@@ -722,22 +810,6 @@ async function graphGet(path){
   return res.json();
 }
 
-// Follows @odata.nextLink so we get ALL items, not just the first 200.
-// Graph pages SharePoint list items in batches; graphGet only returns page 1.
-async function graphGetAll(path){
-  const token = await getToken();
-  let items = [];
-  let url = `https://graph.microsoft.com/v1.0${path}`;
-  while(url){
-    const res = await fetch(url, { headers:{ Authorization:`Bearer ${token}` }});
-    if(!res.ok) throw new Error(await res.text());
-    const data = await res.json();
-    items = items.concat(data.value || []);
-    url = data['@odata.nextLink'] || null;  // absolute URL — fetch as-is
-  }
-  return { value: items };
-}
-
 async function graphPost(path, body){
   const token = await getToken();
   const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
@@ -845,14 +917,18 @@ function switchTab(tabName){
     renderMyUpcomingClasses();
     loadMyAvailability();
   }
+  if (tabName === 'operations-center') {
+    initRosterDropZone();
+    populateSingleCourseDropdown();
+  }
 }
 
 // ── LIVE DATA ────────────────────────────────────
 async function loadDashboardData(){
   try {
     const [coursesData, studentsData] = await Promise.all([
-      graphGetAll(`/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.coursesListId}/items?expand=fields`),
-      graphGetAll(`/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.studentsListId}/items?expand=fields`),
+      graphGet(`/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.coursesListId}/items?expand=fields`),
+      graphGet(`/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.studentsListId}/items?expand=fields`),
     ]);
     state.courses = coursesData.value || [];
     state.students = studentsData.value || [];
@@ -862,6 +938,9 @@ async function loadDashboardData(){
     updateGreetingSummary();
     if (document.getElementById('tab-instructor-center').classList.contains('active')) {
       renderMyUpcomingClasses();
+    }
+    populateSingleCourseDropdown();
+    if (document.getElementById('tab-operations-center').classList.contains('active')) {
     }
   } catch(e){
     console.error('Dashboard data load failed:', e);
@@ -882,10 +961,14 @@ async function loadDashboardData(){
 }
 
 function studentCountForCourse(course){
-  const courseSpId = String(fieldVal(course.fields, 'id') || course.fields.id || '');
   const courseTitle = course.fields.Title;
   return state.students.filter(s => {
     const f = s.fields;
+    // Primary join: LegacyCourseCode on the student matches the course Title
+    // (This is what the Power Automate flow writes when it processes roster files)
+    if (f.LegacyCourseCode && f.LegacyCourseCode === courseTitle) return true;
+    // Fallback: CourseLookupId or Course field for students added via Hub single-add
+    const courseSpId = String(course.fields.id || '');
     if (f.CourseLookupId && courseSpId && String(f.CourseLookupId) === courseSpId) return true;
     if (typeof f.Course === 'string' && f.Course === courseTitle) return true;
     if (typeof f.Course === 'object' && f.Course && (f.Course.LookupValue === courseTitle || f.Course.Value === courseTitle)) return true;
@@ -967,7 +1050,7 @@ function renderMyUpcomingClasses(){
 async function loadMyAvailability(){
   const list = document.getElementById('my-availability-list');
   try {
-    const data = await graphGetAll(
+    const data = await graphGet(
       `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.availabilityListId}/items?expand=fields`
     );
     const myName = state.user.name || state.user.username || '';
@@ -1036,6 +1119,136 @@ async function submitAvailability(){
   btn.textContent = 'Submit availability';
 }
 
+// ── STUDENT ENROLLMENT: ROSTER DROP ZONE ────────
+let rosterFile = null;
+
+function initRosterDropZone(){
+  const zone = document.getElementById('roster-drop-zone');
+  const input = document.getElementById('roster-file-input');
+  if (!zone || zone.dataset.bound) return;
+  zone.dataset.bound = 'true';
+
+  input.addEventListener('change', (e) => {
+    if (e.target.files && e.target.files[0]) setRosterFile(e.target.files[0]);
+  });
+  zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) setRosterFile(e.dataTransfer.files[0]);
+  });
+}
+
+function setRosterFile(file){
+  rosterFile = file;
+  document.getElementById('roster-file-chip').innerHTML = `
+    <div class="dz-file-chip">
+      <span>📄</span>
+      <span class="name">${file.name}</span>
+      <button class="remove" onclick="clearRosterFile()">Remove</button>
+    </div>`;
+  document.getElementById('roster-actions').style.display = 'flex';
+}
+
+function clearRosterFile(){
+  rosterFile = null;
+  document.getElementById('roster-file-chip').innerHTML = '';
+  document.getElementById('roster-actions').style.display = 'none';
+  document.getElementById('roster-file-input').value = '';
+  document.getElementById('roster-status').textContent = '';
+  const btn = document.getElementById('roster-submit-btn');
+  btn.textContent = 'Upload to Roster Drop Zone';
+  btn.disabled = false;
+}
+
+async function submitRoster(){
+  if (!rosterFile) return;
+  const btn = document.getElementById('roster-submit-btn');
+  const statusEl = document.getElementById('roster-status');
+  btn.disabled = true;
+  btn.textContent = 'Uploading…';
+  showLoading(true);
+  try {
+    const token = await getToken();
+    const fileBuf = await rosterFile.arrayBuffer();
+    const filePath = `${CONFIG.rosterDropZonePath}/${rosterFile.name}`;
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/users/${CONFIG.rosterDropZoneOwner}/drive/root:/${encodeURIComponent(filePath)}:/content`,
+      {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream' },
+        body: fileBuf,
+      }
+    );
+    if (!res.ok) throw new Error(await res.text());
+    statusEl.textContent = 'Uploaded — Power Automate will process this shortly.';
+    btn.textContent = 'Uploaded ✓';
+    showToast('Roster uploaded to Drop Zone ✓', 'success');
+  } catch(e){
+    showToast('Upload failed: ' + e.message, 'error');
+    btn.disabled = false;
+    btn.textContent = 'Upload to Roster Drop Zone';
+  }
+  showLoading(false);
+}
+
+async function submitSingleStudent(){
+  const courseSelect = document.getElementById('single-course');
+  const firstEl = document.getElementById('single-first');
+  const lastEl = document.getElementById('single-last');
+  const emailEl = document.getElementById('single-email');
+  const phoneEl = document.getElementById('single-phone');
+  const btn = document.getElementById('single-add-btn');
+
+  const selectedOption = courseSelect.options[courseSelect.selectedIndex];
+  if (!courseSelect.value || !selectedOption){
+    showToast('Please select a course.', 'error');
+    return;
+  }
+  if (!firstEl.value.trim() || !lastEl.value.trim() || !emailEl.value.trim()){
+    showToast('First name, last name, and email are required.', 'error');
+    return;
+  }
+
+  const courseTitle = selectedOption.dataset.title;
+  const courseType = selectedOption.dataset.coursetype;
+  const courseSpId = selectedOption.dataset.spid;
+  const fullName = `${firstEl.value.trim()} ${lastEl.value.trim()}`;
+
+  btn.disabled = true;
+  btn.textContent = 'Adding…';
+  showLoading(true);
+  try {
+    await graphPost(
+      `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.studentsListId}/items`,
+      { fields: {
+        Title: fullName,
+        LastName: lastEl.value.trim(),
+        Email: emailEl.value.trim(),
+        PhoneNumber: phoneEl.value.trim(),
+        CourseType: courseType,
+        LegacyCourseCode: courseTitle,
+        StartDate: selectedOption.dataset.startdate || null,
+        EndDate: selectedOption.dataset.enddate || null,
+        CompletionStatus: 'Enrolled',
+      }}
+    );
+
+    showToast(`${fullName} added to ${courseTitle} ✓`, 'success');
+    firstEl.value = '';
+    lastEl.value = '';
+    emailEl.value = '';
+    phoneEl.value = '';
+    courseSelect.value = '';
+  } catch(e){
+    showToast('Failed to add student: ' + e.message, 'error');
+  }
+  showLoading(false);
+  btn.disabled = false;
+  btn.textContent = 'Add student';
+}
+
 function renderUpcomingClasses(){
   const cutoff = daysFromNow(90);
   const upcoming = state.courses.filter(c => {
@@ -1050,7 +1263,7 @@ function renderUpcomingClasses(){
   const stateEl = document.getElementById('classes-state');
 
   if (!upcoming.length){
-    stateEl.innerHTML = `<div class="empty-state">No classes scheduled in the next 90 days.</div>`;
+    stateEl.innerHTML = `<div class="empty-state">No classes scheduled in the next 60 days.</div>`;
     table.style.display = 'none';
     return;
   }
@@ -1116,7 +1329,6 @@ function renderInstructorAssignments(){
 
 async function renderRecentDocuments(){
   const list = document.getElementById('recent-docs-list');
-  // Intentionally NOT paginated: $top=5 + ordering — we only want the 5 newest files.
   const data = await graphGet(
     `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.trainingRecordsListId}/drive/root/children?$orderby=lastModifiedDateTime desc&$top=5`
   );
