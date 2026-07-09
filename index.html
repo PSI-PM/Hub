@@ -1347,15 +1347,18 @@ async function submitSingleStudent(){
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet([headers, row]);
 
-    // Format date columns as dates so Excel recognises them
-    const dateFmt = 'mm/dd/yyyy';
-    if (!ws['!cols']) ws['!cols'] = headers.map(() => ({ wch: 16 }));
-    ['F2', 'G2'].forEach(cell => {
-      if (ws[cell]) ws[cell].z = dateFmt;
+    // Add a proper Excel Table named Students over the data range
+    ws['!ref'] = 'A1:H2';
+    if (!ws['!tables']) ws['!tables'] = [];
+    ws['!tables'].push({
+      name: 'Students',
+      ref: 'A1:H2',
+      headerRow: true,
+      totalsRow: false,
+      style: { themeIndex: 2, showFirstColumn: false, showLastColumn: false, showRowStripes: true, showColumnStripes: false },
+      columns: headers.map(h => ({ name: h })),
     });
 
-    // Add a proper Excel Table named Students — required by the Power Automate flow
-    ws['!ref'] = `A1:H2`;
     XLSX.utils.book_append_sheet(wb, ws, 'Master Roster');
 
     const wbBuf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
