@@ -8,6 +8,7 @@
 <meta name="theme-color" content="#050f22">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Source+Sans+3:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 /* ============================================================
    THEME TOKENS — matches the Instructor Hub / Attendance Portal
@@ -1320,28 +1321,60 @@ async function submitSingleStudent(){
 
   const courseTitle = courseInput.dataset.title;
   const courseType = courseInput.dataset.coursetype;
-  const fullName = `${firstEl.value.trim()} ${lastEl.value.trim()}`;
+  const startDate = courseInput.dataset.startdate || '';
+  const endDate = courseInput.dataset.enddate || '';
+  const firstName = firstEl.value.trim();
+  const lastName = lastEl.value.trim();
+  const email = emailEl.value.trim();
+  const phone = phoneEl.value.trim();
+
+  // Convert ISO date string to Excel serial number
+  function toExcelDate(iso){
+    if (!iso) return '';
+    const d = new Date(iso);
+    // Excel serial: days since 1900-01-01, with Excel's leap year bug offset
+    return Math.floor((d - new Date(1899, 11, 30)) / 86400000);
+  }
 
   btn.disabled = true;
-  btn.textContent = 'Adding…';
+  btn.textContent = 'Uploading…';
   showLoading(true);
   try {
-    await graphPost(
-      `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.studentsListId}/items`,
-      { fields: {
-        Title: fullName,
-        LastName: lastEl.value.trim(),
-        Email: emailEl.value.trim(),
-        PhoneNumber: phoneEl.value.trim(),
-        CourseType: courseType,
-        CourseId: courseInput.dataset.spid,
-        StartDate: courseInput.dataset.startdate || null,
-        EndDate: courseInput.dataset.enddate || null,
-        CompletionStatus: 'Enrolled',
-      }}
-    );
+    // Build the Excel file matching the exact Roster Drop Zone format
+    const headers = ['First Name', 'Last Name', 'Email', 'Phone', 'Course Name', 'Start Date', 'End Date', 'Course Type'];
+    const row = [firstName, lastName, email, phone, courseTitle, toExcelDate(startDate), toExcelDate(endDate), courseType];
 
-    showToast(`${fullName} added to ${courseTitle} ✓`, 'success');
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([headers, row]);
+
+    // Format date columns as dates so Excel recognises them
+    const dateFmt = 'mm/dd/yyyy';
+    if (!ws['!cols']) ws['!cols'] = headers.map(() => ({ wch: 16 }));
+    ['F2', 'G2'].forEach(cell => {
+      if (ws[cell]) ws[cell].z = dateFmt;
+    });
+
+    // Add a proper Excel Table named Students — required by the Power Automate flow
+    ws['!ref'] = `A1:H2`;
+    XLSX.utils.book_append_sheet(wb, ws, 'Master Roster');
+
+    const wbBuf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+
+    // Upload to Roster Drop Zone
+    const token = await getToken();
+    const fileName = `SingleAdd_${lastName}_${firstName}_${courseTitle}.xlsx`.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const filePath = `${CONFIG.rosterDropZonePath}/${fileName}`;
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/users/${CONFIG.rosterDropZoneOwner}/drive/root:/${encodeURIComponent(filePath)}:/content`,
+      {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream' },
+        body: wbBuf,
+      }
+    );
+    if (!res.ok) throw new Error(await res.text());
+
+    showToast(`${firstName} ${lastName} added to ${courseTitle} ✓`, 'success');
     firstEl.value = '';
     lastEl.value = '';
     emailEl.value = '';
@@ -1358,6 +1391,7 @@ async function submitSingleStudent(){
   btn.disabled = false;
   btn.textContent = 'Add student';
 }
+
 
 function renderUpcomingClasses(){
   const cutoff = daysFromNow(90);
