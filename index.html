@@ -840,6 +840,21 @@ async function graphGet(path){
   return res.json();
 }
 
+async function graphGetAll(path){
+  // Fetches all pages of a Graph list query, following @odata.nextLink until exhausted
+  const token = await getToken();
+  let url = `https://graph.microsoft.com/v1.0${path}`;
+  const allItems = [];
+  while (url) {
+    const res = await fetch(url, { headers:{ Authorization:`Bearer ${token}` } });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    allItems.push(...(data.value || []));
+    url = data['@odata.nextLink'] || null;
+  }
+  return allItems;
+}
+
 async function graphPost(path, body){
   const token = await getToken();
   const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
@@ -1024,12 +1039,12 @@ document.addEventListener('click', (e) => {
 // ── LIVE DATA ────────────────────────────────────
 async function loadDashboardData(){
   try {
-    const [coursesData, studentsData] = await Promise.all([
+    const [coursesData, allStudents] = await Promise.all([
       graphGet(`/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.coursesListId}/items?expand=fields`),
-      graphGet(`/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.studentsListId}/items?expand=fields`),
+      graphGetAll(`/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.studentsListId}/items?expand=fields`),
     ]);
     state.courses = coursesData.value || [];
-    state.students = studentsData.value || [];
+    state.students = allStudents;
 
     renderUpcomingClasses();
     renderInstructorAssignments();
@@ -1058,12 +1073,13 @@ async function loadDashboardData(){
 
 function studentCountForCourse(course){
   const courseTitle = course.fields.Title;
+  const courseSpId = String(course.fields.id || '');
   return state.students.filter(s => {
     const f = s.fields;
     if (f.LegacyCourseCode && f.LegacyCourseCode === courseTitle) return true;
-    if (f.Course && f.Course === courseTitle) return true;
-    const courseSpId = String(course.fields.id || '');
     if (f.CourseLookupId && courseSpId && String(f.CourseLookupId) === courseSpId) return true;
+    if (f.CourseId && courseSpId && String(f.CourseId) === courseSpId) return true;
+    if (f.Course && f.Course === courseTitle) return true;
     return false;
   }).length;
 }
@@ -1318,7 +1334,7 @@ async function submitSingleStudent(){
         Email: emailEl.value.trim(),
         PhoneNumber: phoneEl.value.trim(),
         CourseType: courseType,
-        Course: courseTitle,
+        CourseId: courseInput.dataset.spid,
         StartDate: courseInput.dataset.startdate || null,
         EndDate: courseInput.dataset.enddate || null,
         CompletionStatus: 'Enrolled',
