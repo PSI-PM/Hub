@@ -204,6 +204,28 @@ button { cursor:pointer; font-family:inherit; }
 .custom-select-option:hover { background:rgba(0,140,255,0.15); color:var(--gray-900); }
 .custom-select-option.selected { color:var(--blue); background:rgba(0,140,255,0.1); }
 
+/* ── INVOICE CONTACT CARDS ── */
+.inv-card { background:rgba(0,60,180,0.08); border:0.5px solid var(--card-border); border-radius:12px; margin-bottom:10px; overflow:hidden; }
+.inv-head { display:flex; align-items:center; justify-content:space-between; padding:13px 16px; cursor:pointer; gap:12px; }
+.inv-head:hover { background:rgba(0,100,255,0.06); }
+.inv-cust { font-family:"Playfair Display",serif; font-size:15px; color:var(--gray-900); display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.inv-sub { font-size:11px; color:var(--gray-500); margin-top:3px; }
+.inv-chev { color:var(--gray-500); font-size:12px; flex-shrink:0; }
+.term-pill { font-size:10px; padding:2px 9px; border-radius:20px; font-weight:600; }
+.term-net30 { background:var(--green-light); color:var(--green); }
+.term-receipt { background:var(--blue-light); color:var(--blue); }
+.term-net60 { background:var(--yellow-light); color:var(--yellow); }
+.term-other { background:var(--gray-100); color:var(--gray-700); }
+.inv-body { padding:0 16px 16px; border-top:0.5px solid rgba(0,140,255,0.12); }
+.inv-detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
+.inv-dcell { background:rgba(0,40,120,0.1); border-radius:8px; padding:9px 11px; }
+.inv-dk { font-size:9.5px; color:var(--gray-500); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:3px; }
+.inv-dv { font-size:12px; color:var(--gray-900); line-height:1.45; white-space:pre-line; }
+.inv-dv a { color:var(--blue); text-decoration:none; }
+.inv-remarks { grid-column:1/-1; }
+.inv-remarks .inv-dv { color:var(--gray-400); font-size:11.5px; }
+@media (max-width:640px) { .inv-detail-grid { grid-template-columns:1fr; } }
+
 /* ── DUPLICATE ROSTER BANNER ── */
   background:var(--yellow-light); border:0.5px solid rgba(220,150,30,0.35); border-radius:var(--radius-lg);
   padding:16px 20px; margin-bottom:18px;
@@ -641,10 +663,15 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
       </div>
 
       <!-- FINANCE MANAGEMENT -->
-      <div class="card pending" style="margin-bottom:18px;">
-        <h2>Finance management <span class="pending-tag">⏳ Pending</span></h2>
-        <div class="pending-body">
-          Scope and data source still to be defined with <strong>Amber Johnson (Finance Manager)</strong>. This section will go live once that's worked out.
+      <div class="card" style="margin-bottom:18px;">
+        <h2>Finance management — invoice contacts</h2>
+        <p style="font-size:12.5px;color:var(--gray-500);margin-bottom:14px;">Per-customer invoicing rules: when to invoice, who to send it to, and payment terms.</p>
+        <input type="text" id="invoice-search" placeholder="Search customers…" oninput="renderInvoiceContacts()" style="width:100%;padding:9px 12px;border-radius:8px;border:1.5px solid var(--card-border);background:rgba(0,40,120,0.1);color:var(--gray-900);font-size:13px;outline:none;margin-bottom:14px;">
+        <div id="invoice-contacts-list">
+          <div class="loading-state">
+            <div class="skeleton-line" style="width:100%"></div>
+            <div class="skeleton-line" style="width:85%"></div>
+          </div>
         </div>
       </div>
 
@@ -686,11 +713,25 @@ const CONFIG = {
   attendanceListId: 'd464aa77-7218-49b3-8131-aede92fd8d29',
   trainingRecordsListId: 'f2f81d00-cb73-4f62-b419-6935d3f54a28',
   availabilityListId: '0cd591e3-9e8b-4619-935c-1a2e45b24402',
+  invoiceContactsListId: 'bcb61252-2eb7-4d95-a7af-808462796527',
   rosterDropZoneOwner: 'scottj@psipm.com',
   rosterDropZonePath: 'Roster Drop Zone',
 };
 
 const SCOPES = ['Sites.ReadWrite.All','User.Read'];
+
+// Only these people (matched by email/UPN) can see the Operations Center tab.
+const OPS_CENTER_ALLOWLIST = [
+  'wandap@psipm.com',
+  'scottj@psipm.com',
+  'amberj@psipm.com',
+  'roym@psipm.com',
+];
+
+function hasOpsCenterAccess(){
+  const email = (state.user?.username || '').trim().toLowerCase();
+  return OPS_CENTER_ALLOWLIST.includes(email);
+}
 
 /* ============================================================
    EDIT THESE ARRAYS by hand to update content that doesn't
@@ -904,6 +945,13 @@ function enterApp(){
   document.getElementById('greeting-sub').textContent =
     new Date().toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
   showScreen('screen-app');
+
+  // Operations Center is restricted — hide the tab entirely unless the signed-in user is allowed
+  const opsTabBtn = document.querySelector('.tab-btn[data-tab="operations-center"]');
+  if (opsTabBtn) {
+    opsTabBtn.style.display = hasOpsCenterAccess() ? '' : 'none';
+  }
+
   renderStaticSections();
   loadDashboardData();
 }
@@ -983,6 +1031,10 @@ function renderStaticSections(){
 
 // ── TAB SWITCHING ────────────────────────────────
 function switchTab(tabName){
+  // Guard: Operations Center is restricted regardless of how switchTab is called
+  if (tabName === 'operations-center' && !hasOpsCenterAccess()) {
+    return;
+  }
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabName));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   document.getElementById(`tab-${tabName}`).classList.add('active');
@@ -994,6 +1046,7 @@ function switchTab(tabName){
     initRosterDropZone();
     populateSingleCourseDropdown();
     populateClientDropdown();
+    loadInvoiceContacts();
   }
 }
 
@@ -1081,6 +1134,109 @@ function selectClientOption(el){
   el.classList.add('selected');
   document.getElementById('single-client-trigger').classList.remove('open');
   document.getElementById('single-client-options').classList.remove('open');
+}
+
+// ── INVOICE CONTACTS (Finance Management) ───────
+let invoiceContacts = [];
+
+async function loadInvoiceContacts(){
+  if (invoiceContacts.length) { renderInvoiceContacts(); return; }
+  try {
+    const data = await graphGetAll(
+      `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.invoiceContactsListId}/items?expand=fields`
+    );
+    invoiceContacts = (data || []).map(i => i.fields);
+    renderInvoiceContacts();
+  } catch(e){
+    console.error('Invoice contacts load failed:', e);
+    document.getElementById('invoice-contacts-list').innerHTML =
+      `<div class="error-state">Couldn't load invoice contacts: ${e.message}</div>`;
+  }
+}
+
+function invoiceTermClass(due){
+  const d = (due || '').toLowerCase();
+  if (d.includes('net 30')) return 'term-net30';
+  if (d.includes('net 60')) return 'term-net60';
+  if (d.includes('receipt')) return 'term-receipt';
+  return 'term-other';
+}
+
+function renderInvoiceContacts(){
+  const listEl = document.getElementById('invoice-contacts-list');
+  if (!listEl) return;
+  const query = (document.getElementById('invoice-search')?.value || '').toLowerCase().trim();
+
+  let rows = invoiceContacts.slice().sort((a,b) => (a.Title||'').localeCompare(b.Title||''));
+  if (query){
+    rows = rows.filter(f =>
+      (f.Title||'').toLowerCase().includes(query) ||
+      (f.field_5||'').toLowerCase().includes(query) ||
+      (f.field_6||'').toLowerCase().includes(query)
+    );
+  }
+
+  if (!rows.length){
+    listEl.innerHTML = `<div class="empty-state">${query ? 'No customers match your search.' : 'No invoice contacts found.'}</div>`;
+    return;
+  }
+
+  listEl.innerHTML = rows.map((f, idx) => {
+    const customer = f.Title || 'Unknown';
+    const source = f.field_1 || '';
+    const issueDate = f.field_2 || '';
+    const dueDate = f.field_3 || '';
+    const submissionDate = f.field_4 || '';
+    const contactName = f.field_5 || '';
+    const contactEmail = f.field_6 || '';
+    const submitTo = f.field_7 || '';
+    const paymentTimeline = f.field_8 || '';
+    const remarks = f.field_9 || '';
+
+    const subBits = [];
+    if (issueDate) subBits.push('Invoice: ' + issueDate);
+    if (contactName) subBits.push(contactName);
+    const sub = subBits.join(' · ');
+
+    const termPill = dueDate ? `<span class="term-pill ${invoiceTermClass(dueDate)}">${dueDate}</span>` : '';
+
+    const cell = (label, val) => val ? `<div class="inv-dcell"><div class="inv-dk">${label}</div><div class="inv-dv">${val}</div></div>` : '';
+    const emailCell = (label, val) => val ? `<div class="inv-dcell"><div class="inv-dk">${label}</div><div class="inv-dv">${val.includes('@') ? `<a href="mailto:${val.split(/[\s\n]/)[0]}">${val}</a>` : val}</div></div>` : '';
+
+    const details = [
+      cell('Invoice source', source),
+      cell('Issue date', issueDate),
+      cell('Submission date', submissionDate),
+      cell('Payment timeline', paymentTimeline),
+      cell('Contact name', contactName),
+      emailCell('Contact email', contactEmail),
+      emailCell('Submit to', submitTo),
+      remarks ? `<div class="inv-dcell inv-remarks"><div class="inv-dk">Remarks</div><div class="inv-dv">${remarks}</div></div>` : '',
+    ].filter(Boolean).join('');
+
+    return `
+      <div class="inv-card">
+        <div class="inv-head" onclick="toggleInvoiceCard(${idx})">
+          <div>
+            <div class="inv-cust">${customer} ${termPill}</div>
+            ${sub ? `<div class="inv-sub">${sub}</div>` : ''}
+          </div>
+          <span class="inv-chev" id="inv-chev-${idx}">▸</span>
+        </div>
+        <div class="inv-body" id="inv-body-${idx}" style="display:none;">
+          <div class="inv-detail-grid">${details}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function toggleInvoiceCard(idx){
+  const body = document.getElementById(`inv-body-${idx}`);
+  const chev = document.getElementById(`inv-chev-${idx}`);
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  chev.textContent = open ? '▸' : '▾';
 }
 
 // Close dropdowns if user clicks outside
