@@ -427,7 +427,7 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
     <div class="tab-content active" id="tab-home">
     <!-- HERO / GREETING -->
     <div class="hero-card">
-      <h1 id="greeting-title">Good morning</h1>
+      <h1 id="greeting-title">Welcome</h1>
       <p id="greeting-sub">Loading today's overview…</p>
     </div>
 
@@ -865,6 +865,12 @@ function daysFromNow(n){
   d.setDate(d.getDate() + n);
   return d;
 }
+function greetingForTime(){
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+}
 function statusPillClass(status){
   const s = (status || '').toLowerCase().replace(/\s+/g,'');
   if (s === 'inprogress') return 'inprogress';
@@ -941,7 +947,7 @@ function enterApp(){
   const name = state.user.name || state.user.username;
   const firstName = name.split(' ')[0];
   document.getElementById('header-name').textContent = name;
-  document.getElementById('greeting-title').textContent = `Good morning, ${firstName}`;
+  document.getElementById('greeting-title').textContent = `${greetingForTime()}, ${firstName}`;
   document.getElementById('greeting-sub').textContent =
     new Date().toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
   showScreen('screen-app');
