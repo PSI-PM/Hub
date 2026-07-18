@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Source+Sans+3:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 /* ============================================================
    THEME TOKENS — matches the Instructor Hub / Attendance Portal
@@ -226,16 +227,13 @@ button { cursor:pointer; font-family:inherit; }
 .inv-remarks .inv-dv { color:var(--gray-400); font-size:11.5px; }
 @media (max-width:640px) { .inv-detail-grid { grid-template-columns:1fr; } }
 
-/* ── DUPLICATE ROSTER BANNER ── */
-  background:var(--yellow-light); border:0.5px solid rgba(220,150,30,0.35); border-radius:var(--radius-lg);
-  padding:16px 20px; margin-bottom:18px;
-}
-  display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
-  padding:10px 12px; border-radius:var(--radius); background:rgba(255,255,255,0.03); margin-bottom:8px;
-}
-  padding:7px 16px; border-radius:8px; border:none; background:var(--yellow); color:#1a1200;
-  font-size:12.5px; font-weight:700; cursor:pointer; white-space:nowrap;
-}
+/* ── CLASS INVOICING ROWS ── */
+.invc-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:13px 16px; background:rgba(0,60,180,0.08); border:0.5px solid var(--card-border); border-radius:12px; margin-bottom:10px; }
+.invc-info .invc-title { font-family:"Playfair Display",serif; font-size:15px; color:var(--gray-900); }
+.invc-info .invc-sub { font-size:11.5px; color:var(--gray-500); margin-top:3px; }
+.invc-btn { padding:8px 18px; border-radius:8px; border:none; background:linear-gradient(90deg,#0050d0,#0090e8); color:white; font-size:13px; font-weight:600; box-shadow:0 4px 14px rgba(0,120,220,0.3); white-space:nowrap; transition:opacity .15s; }
+.invc-btn:hover { opacity:0.9; }
+.invc-btn:disabled { opacity:0.5; cursor:not-allowed; }
 
 /* ── MAIN ── */
 #screen-app {
@@ -646,11 +644,15 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
 
       </div>
 
-      <!-- CLIENT CONTACTS -->
-      <div class="card pending" style="margin-bottom:18px; margin-top:18px;">
-        <h2>Client contacts <span class="pending-tag">⏳ Pending</span></h2>
-        <div class="pending-body">
-          Client relationship info currently lives in an Excel sheet, not SharePoint. This section will go live once that data is migrated into a real SharePoint list — same pattern as Courses, Students, and Availability.
+      <!-- CLASS INVOICING -->
+      <div class="card" style="margin-bottom:18px; margin-top:18px;">
+        <h2>Class Invoicing</h2>
+        <p style="font-size:12.5px;color:var(--gray-500);margin-bottom:14px;">Classes currently in progress. Download an enrollment roster — active students marked in attendance, excluding anyone withdrawn — as an Excel file for invoicing. Updates automatically as classes start and complete.</p>
+        <div id="invoicing-classes-list">
+          <div class="loading-state">
+            <div class="skeleton-line" style="width:100%"></div>
+            <div class="skeleton-line" style="width:85%"></div>
+          </div>
         </div>
       </div>
 
@@ -1053,6 +1055,7 @@ function switchTab(tabName){
     populateSingleCourseDropdown();
     populateClientDropdown();
     loadInvoiceContacts();
+    renderInvoicingClasses();
   }
 }
 
@@ -1245,6 +1248,194 @@ function toggleInvoiceCard(idx){
   chev.textContent = open ? '▸' : '▾';
 }
 
+// ── CLASS INVOICING: in-progress classes + enrollment export ───────
+// Lists every course whose Status is "In Progress" (re-read from SharePoint on
+// each load, so it self-updates as classes start and complete). Each row gets an
+// Enrollment button that exports the class's active-attended roster to Excel.
+function renderInvoicingClasses(){
+  const listEl = document.getElementById('invoicing-classes-list');
+  if (!listEl) return;
+
+  if (!state.courses.length){
+    listEl.innerHTML = `<div class="loading-state"><div class="skeleton-line" style="width:100%"></div><div class="skeleton-line" style="width:85%"></div></div>`;
+    return;
+  }
+
+  const inProgress = state.courses
+    .filter(c => fieldVal(c.fields, 'Status') === 'In Progress')
+    .sort((a,b) => new Date(a.fields.StartDate || 0) - new Date(b.fields.StartDate || 0));
+
+  if (!inProgress.length){
+    listEl.innerHTML = `<div class="empty-state">No classes are in progress right now.</div>`;
+    return;
+  }
+
+  listEl.innerHTML = inProgress.map(c => {
+    const f = c.fields;
+    const courseType = fieldVal(f, 'CourseType') || f.Title || '';
+    const partner = fieldVal(f, 'Partner') || '';
+    const start = f.StartDate ? formatDateShort(new Date(f.StartDate)) : '—';
+    const end = f.EndDate ? formatDateShort(new Date(f.EndDate)) : '—';
+    const sub = `${f.Title || ''}${partner ? ' · ' + partner : ''} · ${start}–${end}`;
+    return `
+      <div class="invc-row">
+        <div class="invc-info">
+          <div class="invc-title">${courseType}${partner ? ' — ' + partner : ''}</div>
+          <div class="invc-sub">${sub}</div>
+        </div>
+        <button class="invc-btn" onclick="downloadEnrollment('${c.id}', this)">Enrollment</button>
+      </div>`;
+  }).join('');
+}
+
+// Read any SharePoint field value as plain text (handles choice/lookup objects)
+function cellText(v){
+  if (v == null) return '';
+  if (typeof v === 'object') return v.Value ?? v.LookupValue ?? '';
+  return String(v);
+}
+function isEmailValue(v){ return typeof v === 'string' && /\S+@\S+\.\S+/.test(v); }
+function isPhoneValue(v){ return typeof v === 'string' && /(?:\d[\s\-().]*){7,}/.test(v); }
+function isStatusValue(v){ return ['Enrolled','Completed','In Progress','Withdrawn'].includes(v); }
+
+// Resolve a Students-list column's internal name from candidate display names via
+// the /columns endpoint, then fall back to sniffing sample rows' values with a
+// validator (e.g. find the field whose value looks like an email). Cached per set.
+const _studentsColCache = {};
+async function resolveStudentsColumn(displayCandidates, sampleRows, validator){
+  const cacheKey = displayCandidates[0];
+  if (_studentsColCache[cacheKey] !== undefined) return _studentsColCache[cacheKey];
+  try {
+    if (!resolveStudentsColumn._cols){
+      const cols = await graphGet(
+        `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.studentsListId}/columns`
+      );
+      resolveStudentsColumn._cols = cols.value || [];
+    }
+    const wanted = displayCandidates.map(d => d.toLowerCase());
+    const match = resolveStudentsColumn._cols.find(c =>
+      wanted.includes((c.displayName||'').toLowerCase()) || wanted.includes((c.name||'').toLowerCase()));
+    if (match && match.name){ _studentsColCache[cacheKey] = match.name; return match.name; }
+  } catch(e){ console.warn('Students column lookup failed:', e.message); }
+  if (validator && Array.isArray(sampleRows)){
+    for (const s of sampleRows){
+      const fields = (s && s.fields) || {};
+      for (const [k, v] of Object.entries(fields)){
+        const val = (typeof v === 'object' && v) ? v.Value : v;
+        if (validator(val)){ _studentsColCache[cacheKey] = k; return k; }
+      }
+    }
+  }
+  _studentsColCache[cacheKey] = null;
+  return null;
+}
+
+// Build + download the enrollment roster for one in-progress class.
+// Roster = students with at least one attendance record for this class (from the
+// same Attendance list the Attendance Portal writes), minus anyone whose
+// enrollment status is Withdrawn. Columns: Name, Email, Phone, Client.
+async function downloadEnrollment(courseId, btn){
+  const course = state.courses.find(c => c.id === courseId);
+  if (!course){ showToast('Course not found.', 'error'); return; }
+
+  const originalLabel = btn ? btn.textContent : '';
+  if (btn){ btn.disabled = true; btn.textContent = 'Building…'; }
+  showLoading(true);
+
+  try {
+    const courseTitle = course.fields.Title || '';
+    const courseNumId = String(course.fields.id || '');
+    const client = fieldVal(course.fields, 'Partner') || '';   // one client per class
+
+    // 1) All attendance rows for this course (paginated), matched the same way
+    //    the Attendance Portal matches them.
+    const attendance = await graphGetAll(
+      `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.attendanceListId}/items?expand=fields`
+    );
+    const courseRecords = attendance.filter(r => {
+      const f = r.fields;
+      if (f.CourseLookupId && String(f.CourseLookupId) === courseNumId) return true;
+      if (typeof f.Course === 'object' && f.Course && String(f.Course.Id) === courseNumId) return true;
+      return false;
+    });
+    if (!courseRecords.length){
+      showToast('No attendance has been marked for this class yet.', 'error');
+      return;
+    }
+
+    // 2) Distinct students who've been marked (by StudentLookupId, fallback name)
+    const markedById = new Set();
+    const markedByName = new Set();
+    courseRecords.forEach(r => {
+      const f = r.fields;
+      if (f.StudentLookupId) markedById.add(String(f.StudentLookupId));
+      else if (f.Title) markedByName.add(f.Title.trim().toLowerCase());
+    });
+
+    // 3) Students list (paginated) + resolve email/phone/status columns
+    const students = await graphGetAll(
+      `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.studentsListId}/items?expand=fields`
+    );
+    const statusField = await resolveStudentsColumn(['Completion Status','Status','Enrollment Status'], students, isStatusValue);
+    const emailField  = await resolveStudentsColumn(['Email','Email Address','E-mail','Student Email'], students, isEmailValue);
+    const phoneField  = await resolveStudentsColumn(['Phone','Phone Number','Cell','Mobile','Cell Phone','Telephone'], students, isPhoneValue);
+    if (!statusField) console.warn('Could not resolve the Withdrawn status column — withdrawn students may not be filtered out.');
+
+    const byId = new Map(), byName = new Map();
+    students.forEach(s => {
+      const f = s.fields;
+      if (f.id != null) byId.set(String(f.id), s);
+      if (f.Title) byName.set(f.Title.trim().toLowerCase(), s);
+    });
+
+    // 4) Assemble rows, excluding withdrawn, deduped
+    const seen = new Set();
+    const rows = [];
+    const pushRow = (studentRow, fallbackName) => {
+      const f = studentRow ? studentRow.fields : null;
+      const name = (f && f.Title) || fallbackName || '';
+      const key = (f && f.id != null) ? 'id:' + f.id : 'nm:' + name.trim().toLowerCase();
+      if (!name || seen.has(key)) return;
+      seen.add(key);
+      if (f && statusField){
+        const v = f[statusField];
+        const val = (typeof v === 'object' && v) ? v.Value : v;
+        if (val === 'Withdrawn') return;   // skip withdrawn
+      }
+      rows.push({
+        name,
+        email: (f && emailField) ? cellText(f[emailField]) : '',
+        phone: (f && phoneField) ? cellText(f[phoneField]) : '',
+        client,
+      });
+    };
+    markedById.forEach(spId => pushRow(byId.get(spId), null));
+    markedByName.forEach(nm => { const s = byName.get(nm); pushRow(s, s ? null : nm); });
+
+    if (!rows.length){
+      showToast('Every marked student in this class is withdrawn — nothing to export.', 'error');
+      return;
+    }
+    rows.sort((a,b) => a.name.localeCompare(b.name));
+
+    // 5) Build + download the workbook
+    const aoa = [['Name','Email','Phone','Client'], ...rows.map(r => [r.name, r.email, r.phone, r.client])];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{wch:28},{wch:32},{wch:18},{wch:26}];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Enrollment');
+    const safe = (courseTitle || 'Class').replace(/[^a-zA-Z0-9._-]/g,'_');
+    XLSX.writeFile(wb, `${safe}_Enrollment.xlsx`);
+    showToast(`Enrollment exported — ${rows.length} student${rows.length!==1?'s':''}.`, 'success');
+  } catch(e){
+    console.error('Enrollment export failed:', e);
+    showToast('Export failed: ' + e.message, 'error');
+  } finally {
+    showLoading(false);
+    if (btn){ btn.disabled = false; btn.textContent = originalLabel || 'Enrollment'; }
+  }
+}
+
 // Close dropdowns if user clicks outside
 document.addEventListener('click', (e) => {
   const courseWrap = document.getElementById('single-course-wrap');
@@ -1263,10 +1454,10 @@ document.addEventListener('click', (e) => {
 async function loadDashboardData(){
   try {
     const [coursesData, allStudents] = await Promise.all([
-      graphGet(`/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.coursesListId}/items?expand=fields`),
+      graphGetAll(`/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.coursesListId}/items?expand=fields`),
       graphGetAll(`/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.studentsListId}/items?expand=fields`),
     ]);
-    state.courses = coursesData.value || [];
+    state.courses = coursesData || [];
     state.students = allStudents;
 
     renderUpcomingClasses();
@@ -1276,6 +1467,7 @@ async function loadDashboardData(){
       renderMyUpcomingClasses();
     }
     populateSingleCourseDropdown();
+    renderInvoicingClasses();
   } catch(e){
     console.error('Dashboard data load failed:', e);
     document.getElementById('classes-state').innerHTML =
@@ -1574,7 +1766,7 @@ async function submitSingleStudent(){
     // named "Students". The template uses @@TOKEN@@ placeholders as inline strings.
     // We string-replace those inside sheet1.xml and repackage the zip WITHOUT
     // touching table1.xml — so the table definition survives perfectly.
-    const ROSTER_TEMPLATE_B64 = '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';
+    const ROSTER_TEMPLATE_B64 = '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';
 
     function b64ToUint8(b64str){
       const bin = atob(b64str);
