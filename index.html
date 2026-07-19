@@ -227,6 +227,30 @@ button { cursor:pointer; font-family:inherit; }
 .inv-remarks .inv-dv { color:var(--gray-400); font-size:11.5px; }
 @media (max-width:640px) { .inv-detail-grid { grid-template-columns:1fr; } }
 
+/* ── OPERATIONS LOOKUP (student / class search) ── */
+.srch-input { width:100%; padding:11px 14px; border-radius:8px; border:1.5px solid var(--card-border); background:rgba(0,40,120,0.1); color:var(--gray-900); font-size:14px; outline:none; transition:border-color 0.15s; }
+.srch-input:focus { border-color:rgba(0,180,255,0.5); }
+.srch-group-label { font-size:11px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--gray-500); margin:18px 0 10px; }
+.srch-card { background:rgba(0,60,180,0.08); border:0.5px solid var(--card-border); border-radius:12px; margin-bottom:10px; overflow:hidden; }
+.srch-stu-head { padding:14px 16px; }
+.srch-name { font-family:"Playfair Display",serif; font-size:16px; color:var(--gray-900); display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
+.srch-meta-grid { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-top:12px; }
+.srch-cell { background:rgba(0,40,120,0.1); border-radius:8px; padding:8px 11px; }
+.srch-ck { font-size:9.5px; color:var(--gray-500); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:3px; }
+.srch-cv { font-size:12.5px; color:var(--gray-900); line-height:1.45; word-break:break-word; }
+.srch-cv a { color:var(--blue); text-decoration:none; }
+.srch-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.srch-btn { padding:7px 15px; border-radius:8px; border:none; background:linear-gradient(90deg,#0050d0,#0090e8); color:white; font-size:12.5px; font-weight:600; text-decoration:none; display:inline-block; box-shadow:0 4px 14px rgba(0,120,220,0.25); }
+.srch-btn:hover { opacity:0.9; }
+.srch-btn.alt { background:rgba(0,140,255,0.12); border:0.5px solid rgba(0,160,255,0.3); color:var(--gray-700); box-shadow:none; }
+.srch-cls-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:13px 16px; cursor:pointer; }
+.srch-cls-head:hover { background:rgba(0,100,255,0.06); }
+.srch-cls-num { font-family:"Playfair Display",serif; font-size:15px; color:var(--gray-900); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.srch-cls-sub { font-size:11.5px; color:var(--gray-500); margin-top:3px; }
+.srch-cls-body { padding:0 16px 14px; border-top:0.5px solid rgba(0,140,255,0.12); }
+.srch-note { font-size:11.5px; color:var(--gray-500); margin-top:10px; line-height:1.5; }
+@media (max-width:640px) { .srch-meta-grid { grid-template-columns:1fr; } }
+
 /* ── CLASS INVOICING ROWS ── */
 .invc-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:13px 16px; background:rgba(0,60,180,0.08); border:0.5px solid var(--card-border); border-radius:12px; margin-bottom:10px; }
 .invc-info .invc-title { font-family:"Playfair Display",serif; font-size:15px; color:var(--gray-900); }
@@ -308,6 +332,7 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
 .pill.confirmed, .pill.inprogress { background:var(--blue-light); color:var(--blue); }
 .pill.tentative, .pill.upcoming { background:var(--yellow-light); color:var(--yellow); }
 .pill.completed { background:var(--green-light); color:var(--green); }
+.pill.withdrawn { background:var(--red-light); color:var(--red); }
 .view-link { display:block; text-align:right; margin-top:12px; font-size:13px; color:var(--blue); font-weight:600; text-decoration:none; }
 .view-link:hover { color:var(--blue-dark); }
 
@@ -573,6 +598,14 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
       <div class="hero-card" style="margin-bottom:18px;">
         <h1 style="font-size:22px;">Operations Center</h1>
         <p style="margin-top:4px;">Client, financial, and administrative operations — built out section by section as the underlying data gets organized.</p>
+      </div>
+
+      <!-- STUDENT & CLASS LOOKUP -->
+      <div class="card" style="margin-bottom:18px;">
+        <h2>Student &amp; class lookup</h2>
+        <p style="font-size:12.5px;color:var(--gray-500);margin-bottom:14px;">Search a student by name or email, or a class by its course number (e.g. E26-Mid-F7). Students return a detail card with links to their training records; classes open the full roster.</p>
+        <input type="text" class="srch-input" id="ops-search" placeholder="Search students or course numbers…" oninput="renderOpsSearch()" autocomplete="off">
+        <div id="ops-search-results"></div>
       </div>
 
       <!-- STUDENT ENROLLMENT -->
@@ -1056,6 +1089,7 @@ function switchTab(tabName){
     populateClientDropdown();
     loadInvoiceContacts();
     renderInvoicingClasses();
+    initOpsSearch();
   }
 }
 
@@ -1376,9 +1410,8 @@ async function downloadEnrollment(courseId, btn){
     const students = await graphGetAll(
       `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.studentsListId}/items?expand=fields`
     );
-    const statusField = await resolveStudentsColumn(['Completion Status','Status','Enrollment Status'], students, isStatusValue);
-    const emailField  = await resolveStudentsColumn(['Email','Email Address','E-mail','Student Email'], students, isEmailValue);
-    const phoneField  = await resolveStudentsColumn(['Phone','Phone Number','Cell','Mobile','Cell Phone','Telephone'], students, isPhoneValue);
+    const fieldMap = await ensureStudentFieldMap(students);
+    const statusField = fieldMap.status, emailField = fieldMap.email, phoneField = fieldMap.phone;
     if (!statusField) console.warn('Could not resolve the Withdrawn status column — withdrawn students may not be filtered out.');
 
     const byId = new Map(), byName = new Map();
@@ -1486,17 +1519,26 @@ async function loadDashboardData(){
   }
 }
 
-function studentCountForCourse(course){
+// Single source of truth for "does this student belong to this course?" — the
+// Students list links to Courses inconsistently (legacy code, lookup id, or a
+// plain text course name), so all four shapes are checked.
+function studentMatchesCourse(f, course){
   const courseTitle = course.fields.Title;
   const courseSpId = String(course.fields.id || '');
-  return state.students.filter(s => {
-    const f = s.fields;
-    if (f.LegacyCourseCode && f.LegacyCourseCode === courseTitle) return true;
-    if (f.CourseLookupId && courseSpId && String(f.CourseLookupId) === courseSpId) return true;
-    if (f.CourseId && courseSpId && String(f.CourseId) === courseSpId) return true;
-    if (f.Course && f.Course === courseTitle) return true;
-    return false;
-  }).length;
+  if (f.LegacyCourseCode && f.LegacyCourseCode === courseTitle) return true;
+  if (f.CourseLookupId && courseSpId && String(f.CourseLookupId) === courseSpId) return true;
+  if (f.CourseId && courseSpId && String(f.CourseId) === courseSpId) return true;
+  if (f.Course && f.Course === courseTitle) return true;
+  return false;
+}
+function studentsForCourse(course){
+  return state.students.filter(s => studentMatchesCourse(s.fields, course));
+}
+function coursesForStudent(student){
+  return state.courses.filter(c => studentMatchesCourse(student.fields, c));
+}
+function studentCountForCourse(course){
+  return studentsForCourse(course).length;
 }
 
 // ── MY UPCOMING CLASSES (Instructor Center) ─────
@@ -1837,6 +1879,240 @@ async function submitSingleStudent(){
   btn.textContent = 'Add student';
 }
 
+
+// ── OPERATIONS: STUDENT & CLASS LOOKUP ─────────────────────────────
+// Search runs entirely against data already in memory (state.students /
+// state.courses), so results are instant — no Graph calls per keystroke.
+
+function escHtml(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function studentStatusPillClass(status){
+  const s = (status || '').toLowerCase().replace(/\s+/g,'');
+  if (s === 'withdrawn') return 'withdrawn';
+  if (s === 'completed') return 'completed';
+  if (s === 'enrolled' || s === 'inprogress') return 'inprogress';
+  return 'tentative';
+}
+
+// Resolve the Students list's email / phone / status columns once and reuse.
+let _studentFieldMap = null;
+async function ensureStudentFieldMap(sampleRows){
+  if (_studentFieldMap) return _studentFieldMap;
+  const rows = (sampleRows && sampleRows.length) ? sampleRows : state.students;
+  _studentFieldMap = {
+    status: await resolveStudentsColumn(['Completion Status','Status','Enrollment Status'], rows, isStatusValue),
+    email:  await resolveStudentsColumn(['Email','Email Address','E-mail','Student Email'], rows, isEmailValue),
+    phone:  await resolveStudentsColumn(['Phone','Phone Number','Cell','Mobile','Cell Phone','Telephone'], rows, isPhoneValue),
+  };
+  return _studentFieldMap;
+}
+
+// Courses currently rendered in the results, indexed to match the DOM so a
+// roster can be expanded without re-searching.
+let _opsSearchCourses = [];
+const OPS_SEARCH_LIMIT = 25;
+
+async function initOpsSearch(){
+  try { if (state.students.length) await ensureStudentFieldMap(); } catch(e){ console.warn('Field map resolve failed:', e.message); }
+  renderOpsSearch();
+}
+
+async function renderOpsSearch(){
+  const box = document.getElementById('ops-search-results');
+  const inputEl = document.getElementById('ops-search');
+  if (!box || !inputEl) return;
+
+  const q = (inputEl.value || '').trim().toLowerCase();
+  if (!q){ box.innerHTML = ''; _opsSearchCourses = []; return; }
+
+  if (!state.students.length && !state.courses.length){
+    box.innerHTML = `<div class="loading-state">Loading students and classes…</div>`;
+    return;
+  }
+
+  let map = _studentFieldMap;
+  if (!map){
+    try { map = await ensureStudentFieldMap(); } catch(e){ map = {}; }
+    // Another keystroke landed while resolving — that render will finish the job
+    if ((inputEl.value || '').trim().toLowerCase() !== q) return;
+  }
+
+  const courses = state.courses.filter(c => {
+    const f = c.fields;
+    return [f.Title, fieldVal(f,'CourseType'), fieldVal(f,'Partner')]
+      .some(v => String(v || '').toLowerCase().includes(q));
+  }).sort((a,b) => String(a.fields.Title||'').localeCompare(String(b.fields.Title||'')));
+
+  const students = state.students.filter(s => {
+    const f = s.fields;
+    if (String(f.Title || '').toLowerCase().includes(q)) return true;
+    if (map.email && String(cellText(f[map.email])).toLowerCase().includes(q)) return true;
+    return false;
+  }).sort((a,b) => String(a.fields.Title||'').localeCompare(String(b.fields.Title||'')));
+
+  if (!students.length && !courses.length){
+    box.innerHTML = `<div class="empty-state">Nothing matches “${escHtml(q)}”.</div>`;
+    _opsSearchCourses = [];
+    return;
+  }
+
+  const shownCourses = courses.slice(0, OPS_SEARCH_LIMIT);
+  _opsSearchCourses = shownCourses;
+
+  let html = '';
+
+  if (students.length){
+    const shown = students.slice(0, OPS_SEARCH_LIMIT);
+    html += `<div class="srch-group-label">Students (${students.length})</div>`;
+    html += shown.map(s => renderStudentCard(s, map)).join('');
+    if (students.length > shown.length){
+      html += `<div class="srch-note">Showing the first ${shown.length} of ${students.length} — keep typing to narrow it down.</div>`;
+    }
+  }
+
+  if (shownCourses.length){
+    html += `<div class="srch-group-label">Classes (${courses.length})</div>`;
+    html += shownCourses.map((c, i) => renderClassResult(c, i)).join('');
+    if (courses.length > shownCourses.length){
+      html += `<div class="srch-note">Showing the first ${shownCourses.length} of ${courses.length} — keep typing to narrow it down.</div>`;
+    }
+  }
+
+  box.innerHTML = html;
+}
+
+function renderStudentCard(s, map){
+  const f = s.fields;
+  const name = f.Title || '(no name on record)';
+  const email = map.email ? cellText(f[map.email]) : '';
+  const phone = map.phone ? cellText(f[map.phone]) : '';
+  const status = map.status ? cellText(f[map.status]) : '';
+
+  const myCourses = coursesForStudent(s);
+  const client = myCourses.length ? (fieldVal(myCourses[0].fields, 'Partner') || '') : '';
+  const classLabel = myCourses.length
+    ? myCourses.map(c => c.fields.Title).filter(Boolean).join(', ')
+    : (f.LegacyCourseCode || fieldVal(f, 'Course') || '');
+
+  const cell = (k, v) => v ? `<div class="srch-cell"><div class="srch-ck">${k}</div><div class="srch-cv">${v}</div></div>` : '';
+
+  const buttons = myCourses.map(c => {
+    const url = trainingRecordsUrl(c.fields.Title);
+    if (!url) return '';
+    const label = myCourses.length > 1
+      ? `Training Records — ${escHtml(c.fields.Title)}`
+      : 'Training Records';
+    return `<a class="srch-btn" href="${url}" target="_blank" rel="noopener">${label} ↗</a>`;
+  }).filter(Boolean);
+  if (email) buttons.push(`<a class="srch-btn alt" href="mailto:${escHtml(email)}">Email student</a>`);
+
+  const note = !myCourses.length
+    ? `<div class="srch-note">No class in the Courses list matches this student's course field, so training records can't be linked automatically.</div>`
+    : '';
+
+  return `
+    <div class="srch-card">
+      <div class="srch-stu-head">
+        <div class="srch-name">${escHtml(name)}${status ? ` <span class="pill ${studentStatusPillClass(status)}">${escHtml(status)}</span>` : ''}</div>
+        <div class="srch-meta-grid">
+          ${cell('Email', email ? `<a href="mailto:${escHtml(email)}">${escHtml(email)}</a>` : '')}
+          ${cell('Phone', phone ? `<a href="tel:${escHtml(phone.replace(/[^\d+]/g,''))}">${escHtml(phone)}</a>` : '')}
+          ${cell('Class', escHtml(classLabel))}
+          ${cell('Client', escHtml(client))}
+        </div>
+        ${buttons.length ? `<div class="srch-actions">${buttons.join('')}</div>` : ''}
+        ${note}
+      </div>
+    </div>`;
+}
+
+function renderClassResult(c, idx){
+  const f = c.fields;
+  const num = f.Title || '(untitled class)';
+  const status = fieldVal(f, 'Status');
+  const start = f.StartDate ? formatDateShort(new Date(f.StartDate)) : '';
+  const end = f.EndDate ? formatDateShort(new Date(f.EndDate)) : '';
+  const count = studentsForCourse(c).length;
+  const bits = [
+    fieldVal(f, 'CourseType'),
+    fieldVal(f, 'Partner'),
+    (start && end) ? `${start}–${end}` : (start || ''),
+    `${count} student${count !== 1 ? 's' : ''}`,
+  ].filter(Boolean);
+
+  return `
+    <div class="srch-card">
+      <div class="srch-cls-head" onclick="toggleClassRoster(${idx})">
+        <div>
+          <div class="srch-cls-num">${escHtml(num)}${status ? ` <span class="pill ${statusPillClass(status)}">${escHtml(status)}</span>` : ''}</div>
+          <div class="srch-cls-sub">${escHtml(bits.join(' · '))}</div>
+        </div>
+        <span class="inv-chev" id="srch-chev-${idx}">▸</span>
+      </div>
+      <div class="srch-cls-body" id="srch-body-${idx}" style="display:none;"></div>
+    </div>`;
+}
+
+async function toggleClassRoster(idx){
+  const body = document.getElementById(`srch-body-${idx}`);
+  const chev = document.getElementById(`srch-chev-${idx}`);
+  if (!body) return;
+
+  const isOpen = body.style.display !== 'none';
+  if (isOpen){
+    body.style.display = 'none';
+    if (chev) chev.textContent = '▸';
+    return;
+  }
+  body.style.display = 'block';
+  if (chev) chev.textContent = '▾';
+  if (body.dataset.loaded) return;
+
+  const course = _opsSearchCourses[idx];
+  if (!course){ body.innerHTML = `<div class="error-state">Class not found — try searching again.</div>`; return; }
+
+  body.innerHTML = `<div class="loading-state">Loading roster…</div>`;
+  let map;
+  try { map = await ensureStudentFieldMap(); } catch(e){ map = {}; }
+
+  const roster = studentsForCourse(course)
+    .sort((a,b) => String(a.fields.Title||'').localeCompare(String(b.fields.Title||'')));
+  const trUrl = trainingRecordsUrl(course.fields.Title);
+  const trButton = trUrl
+    ? `<div class="srch-actions" style="margin-top:12px;"><a class="srch-btn" href="${trUrl}" target="_blank" rel="noopener">Training Records ↗</a></div>`
+    : '';
+
+  if (!roster.length){
+    body.innerHTML = trButton + `<div class="empty-state">No students in the Students list are linked to this class.</div>`;
+    body.dataset.loaded = '1';
+    return;
+  }
+
+  const rows = roster.map(s => {
+    const f = s.fields;
+    const email = map.email ? cellText(f[map.email]) : '';
+    const status = map.status ? cellText(f[map.status]) : '';
+    return `
+      <tr>
+        <td class="course">${escHtml(f.Title || '')}</td>
+        <td>${email ? `<a href="mailto:${escHtml(email)}" style="color:var(--blue);">${escHtml(email)}</a>` : '—'}</td>
+        <td>${status ? `<span class="pill ${studentStatusPillClass(status)}">${escHtml(status)}</span>` : '—'}</td>
+      </tr>`;
+  }).join('');
+
+  body.innerHTML = trButton + `
+    <div class="table-wrap" style="margin-top:12px;">
+      <table class="data-table">
+        <thead><tr><th>Name</th><th>Email</th><th>Status</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  body.dataset.loaded = '1';
+}
 
 function renderUpcomingClasses(){
   const cutoff = daysFromNow(90);
