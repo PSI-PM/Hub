@@ -333,6 +333,7 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
 .pill.tentative, .pill.upcoming { background:var(--yellow-light); color:var(--yellow); }
 .pill.completed { background:var(--green-light); color:var(--green); }
 .pill.withdrawn { background:var(--red-light); color:var(--red); }
+.pill.legacy { background:var(--gray-100); color:var(--gray-700); }
 .view-link { display:block; text-align:right; margin-top:12px; font-size:13px; color:var(--blue); font-weight:600; text-decoration:none; }
 .view-link:hover { color:var(--blue-dark); }
 
@@ -603,7 +604,7 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
       <!-- STUDENT & CLASS LOOKUP -->
       <div class="card" style="margin-bottom:18px;">
         <h2>Student &amp; class lookup</h2>
-        <p style="font-size:12.5px;color:var(--gray-500);margin-bottom:14px;">Search a student by name or email, or a class by its course number (e.g. E26-Mid-F7). Students return a detail card with links to their training records; classes open the full roster.</p>
+        <p style="font-size:12.5px;color:var(--gray-500);margin-bottom:14px;">Search a student by name or email, or a class by its course number (e.g. E26-Mid-F7) — including legacy classes that only exist on student records. Students return a detail card with links to their training records; classes open the full roster.</p>
         <input type="text" class="srch-input" id="ops-search" placeholder="Search students or course numbers…" oninput="renderOpsSearch()" autocomplete="off">
         <div id="ops-search-results"></div>
       </div>
@@ -1911,10 +1912,34 @@ async function ensureStudentFieldMap(sampleRows){
   return _studentFieldMap;
 }
 
-// Courses currently rendered in the results, indexed to match the DOM so a
-// roster can be expanded without re-searching.
-let _opsSearchCourses = [];
+// Classes currently rendered in the results, indexed to match the DOM so a
+// roster can be expanded without re-searching. Holds two shapes:
+//   { kind:'course', course, number }   — a row in the Courses list
+//   { kind:'legacy', number, students } — a course code that only exists as
+//                                         LegacyCourseCode on student records
+let _opsSearchClasses = [];
 const OPS_SEARCH_LIMIT = 25;
+
+// Distinct legacy course codes gathered from the Students list. Historical
+// classes were never created in the Courses list — the only record that they
+// existed is the LegacyCourseCode column on each student — so they're indexed
+// here to make every PSI class searchable, not just the current ones.
+let _legacyIndex = null;
+let _legacyIndexSize = -1;
+function getLegacyClassIndex(){
+  if (_legacyIndex && _legacyIndexSize === state.students.length) return _legacyIndex;
+  const map = new Map();
+  state.students.forEach(s => {
+    const code = String(cellText(s.fields.LegacyCourseCode) || '').trim();
+    if (!code) return;
+    const key = code.toLowerCase();
+    if (!map.has(key)) map.set(key, { number: code, students: [] });
+    map.get(key).students.push(s);
+  });
+  _legacyIndex = map;
+  _legacyIndexSize = state.students.length;
+  return _legacyIndex;
+}
 
 async function initOpsSearch(){
   try { if (state.students.length) await ensureStudentFieldMap(); } catch(e){ console.warn('Field map resolve failed:', e.message); }
@@ -1927,7 +1952,7 @@ async function renderOpsSearch(){
   if (!box || !inputEl) return;
 
   const q = (inputEl.value || '').trim().toLowerCase();
-  if (!q){ box.innerHTML = ''; _opsSearchCourses = []; return; }
+  if (!q){ box.innerHTML = ''; _opsSearchClasses = []; return; }
 
   if (!state.students.length && !state.courses.length){
     box.innerHTML = `<div class="loading-state">Loading students and classes…</div>`;
@@ -1941,11 +1966,29 @@ async function renderOpsSearch(){
     if ((inputEl.value || '').trim().toLowerCase() !== q) return;
   }
 
-  const courses = state.courses.filter(c => {
+  // Classes that exist in the Courses list
+  const courseHits = state.courses.filter(c => {
     const f = c.fields;
     return [f.Title, fieldVal(f,'CourseType'), fieldVal(f,'Partner')]
       .some(v => String(v || '').toLowerCase().includes(q));
-  }).sort((a,b) => String(a.fields.Title||'').localeCompare(String(b.fields.Title||'')));
+  }).sort((a,b) => String(a.fields.Title||'').localeCompare(String(b.fields.Title||'')))
+    .map(c => ({ kind:'course', course:c, number:String(c.fields.Title||'') }));
+
+  // Legacy classes that only exist on student records. Any code that also has a
+  // real Courses row is skipped — that row already covers it.
+  const courseTitles = new Set(
+    state.courses.map(c => String(c.fields.Title||'').trim().toLowerCase()).filter(Boolean)
+  );
+  const legacyHits = [];
+  getLegacyClassIndex().forEach((entry, key) => {
+    if (courseTitles.has(key)) return;
+    if (!key.includes(q)) return;
+    legacyHits.push({ kind:'legacy', number:entry.number, students:entry.students });
+  });
+  legacyHits.sort((a,b) => a.number.localeCompare(b.number));
+
+  // Current classes first, then archived ones
+  const classes = courseHits.concat(legacyHits);
 
   const students = state.students.filter(s => {
     const f = s.fields;
@@ -1954,14 +1997,14 @@ async function renderOpsSearch(){
     return false;
   }).sort((a,b) => String(a.fields.Title||'').localeCompare(String(b.fields.Title||'')));
 
-  if (!students.length && !courses.length){
+  if (!students.length && !classes.length){
     box.innerHTML = `<div class="empty-state">Nothing matches “${escHtml(q)}”.</div>`;
-    _opsSearchCourses = [];
+    _opsSearchClasses = [];
     return;
   }
 
-  const shownCourses = courses.slice(0, OPS_SEARCH_LIMIT);
-  _opsSearchCourses = shownCourses;
+  const shownClasses = classes.slice(0, OPS_SEARCH_LIMIT);
+  _opsSearchClasses = shownClasses;
 
   let html = '';
 
@@ -1974,11 +2017,13 @@ async function renderOpsSearch(){
     }
   }
 
-  if (shownCourses.length){
-    html += `<div class="srch-group-label">Classes (${courses.length})</div>`;
-    html += shownCourses.map((c, i) => renderClassResult(c, i)).join('');
-    if (courses.length > shownCourses.length){
-      html += `<div class="srch-note">Showing the first ${shownCourses.length} of ${courses.length} — keep typing to narrow it down.</div>`;
+  if (shownClasses.length){
+    const legacyCount = classes.filter(r => r.kind === 'legacy').length;
+    const legacyNote = legacyCount ? ` — ${legacyCount} legacy` : '';
+    html += `<div class="srch-group-label">Classes (${classes.length}${legacyNote})</div>`;
+    html += shownClasses.map((r, i) => renderClassResult(r, i)).join('');
+    if (classes.length > shownClasses.length){
+      html += `<div class="srch-note">Showing the first ${shownClasses.length} of ${classes.length} — keep typing to narrow it down.</div>`;
     }
   }
 
@@ -1993,25 +2038,36 @@ function renderStudentCard(s, map){
   const status = map.status ? cellText(f[map.status]) : '';
 
   const myCourses = coursesForStudent(s);
+
+  // A student's class can come from a Courses-list match, from the legacy code
+  // column, or from a plain text Course field. Collect all of them (deduped,
+  // case-insensitively) so historical students still get a records link.
+  const classCodes = [];
+  const pushCode = (v) => {
+    const t = String(v == null ? '' : v).trim();
+    if (t && !classCodes.some(x => x.toLowerCase() === t.toLowerCase())) classCodes.push(t);
+  };
+  myCourses.forEach(c => pushCode(c.fields.Title));
+  pushCode(cellText(f.LegacyCourseCode));
+  pushCode(fieldVal(f, 'Course'));
+
   const client = myCourses.length ? (fieldVal(myCourses[0].fields, 'Partner') || '') : '';
-  const classLabel = myCourses.length
-    ? myCourses.map(c => c.fields.Title).filter(Boolean).join(', ')
-    : (f.LegacyCourseCode || fieldVal(f, 'Course') || '');
+  const classLabel = classCodes.join(', ');
 
   const cell = (k, v) => v ? `<div class="srch-cell"><div class="srch-ck">${k}</div><div class="srch-cv">${v}</div></div>` : '';
 
-  const buttons = myCourses.map(c => {
-    const url = trainingRecordsUrl(c.fields.Title);
+  const buttons = classCodes.map(code => {
+    const url = trainingRecordsUrl(code);
     if (!url) return '';
-    const label = myCourses.length > 1
-      ? `Training Records — ${escHtml(c.fields.Title)}`
+    const label = classCodes.length > 1
+      ? `Training Records — ${escHtml(code)}`
       : 'Training Records';
     return `<a class="srch-btn" href="${url}" target="_blank" rel="noopener">${label} ↗</a>`;
   }).filter(Boolean);
   if (email) buttons.push(`<a class="srch-btn alt" href="mailto:${escHtml(email)}">Email student</a>`);
 
-  const note = !myCourses.length
-    ? `<div class="srch-note">No class in the Courses list matches this student's course field, so training records can't be linked automatically.</div>`
+  const note = !classCodes.length
+    ? `<div class="srch-note">No class on this student's record, so training records can't be linked automatically.</div>`
     : '';
 
   return `
@@ -2030,13 +2086,29 @@ function renderStudentCard(s, map){
     </div>`;
 }
 
-function renderClassResult(c, idx){
-  const f = c.fields;
+function renderClassResult(r, idx){
+  // Legacy class — reconstructed from student records, so headcount is all we have
+  if (r.kind === 'legacy'){
+    const count = r.students.length;
+    return `
+      <div class="srch-card">
+        <div class="srch-cls-head" onclick="toggleClassRoster(${idx})">
+          <div>
+            <div class="srch-cls-num">${escHtml(r.number)} <span class="pill legacy">Legacy</span></div>
+            <div class="srch-cls-sub">${count} student${count !== 1 ? 's' : ''} · from student records</div>
+          </div>
+          <span class="inv-chev" id="srch-chev-${idx}">▸</span>
+        </div>
+        <div class="srch-cls-body" id="srch-body-${idx}" style="display:none;"></div>
+      </div>`;
+  }
+
+  const f = r.course.fields;
   const num = f.Title || '(untitled class)';
   const status = fieldVal(f, 'Status');
   const start = f.StartDate ? formatDateShort(new Date(f.StartDate)) : '';
   const end = f.EndDate ? formatDateShort(new Date(f.EndDate)) : '';
-  const count = studentsForCourse(c).length;
+  const count = studentsForCourse(r.course).length;
   const bits = [
     fieldVal(f, 'CourseType'),
     fieldVal(f, 'Partner'),
@@ -2072,16 +2144,17 @@ async function toggleClassRoster(idx){
   if (chev) chev.textContent = '▾';
   if (body.dataset.loaded) return;
 
-  const course = _opsSearchCourses[idx];
-  if (!course){ body.innerHTML = `<div class="error-state">Class not found — try searching again.</div>`; return; }
+  const r = _opsSearchClasses[idx];
+  if (!r){ body.innerHTML = `<div class="error-state">Class not found — try searching again.</div>`; return; }
 
   body.innerHTML = `<div class="loading-state">Loading roster…</div>`;
   let map;
   try { map = await ensureStudentFieldMap(); } catch(e){ map = {}; }
 
-  const roster = studentsForCourse(course)
+  const classNumber = r.kind === 'legacy' ? r.number : String(r.course.fields.Title || '');
+  const roster = (r.kind === 'legacy' ? r.students.slice() : studentsForCourse(r.course))
     .sort((a,b) => String(a.fields.Title||'').localeCompare(String(b.fields.Title||'')));
-  const trUrl = trainingRecordsUrl(course.fields.Title);
+  const trUrl = trainingRecordsUrl(classNumber);
   const trButton = trUrl
     ? `<div class="srch-actions" style="margin-top:12px;"><a class="srch-btn" href="${trUrl}" target="_blank" rel="noopener">Training Records ↗</a></div>`
     : '';
