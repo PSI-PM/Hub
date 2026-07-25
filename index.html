@@ -481,6 +481,7 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
     <button class="tab-btn active" data-tab="home" onclick="switchTab('home')">Home</button>
     <button class="tab-btn" data-tab="instructor-center" onclick="switchTab('instructor-center')">Instructor Center</button>
     <button class="tab-btn" data-tab="operations-center" onclick="switchTab('operations-center')">Operations Center</button>
+    <button class="tab-btn" data-tab="leadership" onclick="switchTab('leadership')">Leadership</button>
   </nav>
 
   <main class="app-main">
@@ -795,6 +796,24 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
     </div>
     <!-- end tab-operations-center -->
 
+    <div class="tab-content" id="tab-leadership">
+
+      <div class="hero-card" style="margin-bottom:18px;">
+        <h1 style="font-size:22px;">Leadership</h1>
+        <p style="margin-top:4px;">Executive view for Roy, Amber, and Scott — built out section by section, same as the Operations Center was.</p>
+      </div>
+
+      <!-- LEADERSHIP SECTIONS -->
+      <div class="card pending">
+        <h2>Nothing here yet <span class="pending-tag">⏳ Ready to build</span></h2>
+        <div class="pending-body">
+          This tab is wired up and restricted to the leadership allowlist. Decide what should live here — financial dashboards, strategic documents, board materials — and it gets added one card at a time.
+        </div>
+      </div>
+
+    </div>
+    <!-- end tab-leadership -->
+
   </main>
 </div>
 
@@ -833,6 +852,18 @@ const OPS_CENTER_ALLOWLIST = [
 function hasOpsCenterAccess(){
   const email = (state.user?.username || '').trim().toLowerCase();
   return OPS_CENTER_ALLOWLIST.includes(email);
+}
+
+// Leadership tab — tighter list than Ops (Wanda has Ops access but not this).
+const LEADERSHIP_ALLOWLIST = [
+  'roym@psipm.com',
+  'amberj@psipm.com',
+  'scottj@psipm.com',
+];
+
+function hasLeadershipAccess(){
+  const email = (state.user?.username || '').trim().toLowerCase();
+  return LEADERSHIP_ALLOWLIST.includes(email);
 }
 
 /* ============================================================
@@ -959,7 +990,7 @@ const msalApp = new msal.PublicClientApplication({
   cache: { cacheLocation: 'sessionStorage' },
 });
 
-let state = { user: null, courses: [], students: [], availability: [], announcements: [], announcementsListId: null };
+let state = { user: null, courses: [], students: [], availability: [], announcements: [], announcementsListId: null, annCols: null };
 
 // ── UTILS ───────────────────────────────────────
 function showScreen(id){
@@ -1033,7 +1064,7 @@ async function getToken(){
   }
 }
 function handleLogout(){
-  state = { user:null, courses:[], students:[], availability:[], announcements:[], announcementsListId:null };
+  state = { user:null, courses:[], students:[], availability:[], announcements:[], announcementsListId:null, annCols:null };
   msalApp.logoutRedirect({ postLogoutRedirectUri: window.location.href });
 }
 
@@ -1103,6 +1134,11 @@ function enterApp(){
   // (UI-only gating — SharePoint list permissions are the real authority.)
   const annBtn = document.getElementById('ann-add-toggle');
   if (annBtn) annBtn.style.display = hasOpsCenterAccess() ? '' : 'none';
+
+  const leadTabBtn = document.querySelector('.tab-btn[data-tab="leadership"]');
+  if (leadTabBtn) {
+    leadTabBtn.style.display = hasLeadershipAccess() ? '' : 'none';
+  }
 
   renderStaticSections();
   loadDashboardData();
@@ -1187,12 +1223,44 @@ async function resolveAnnouncementsListId(){
   return hit.id;
 }
 
+// SharePoint's display names and internal names diverge (a column shown as
+// 'Description' can be 'Description0' or 'Body' underneath, which is exactly
+// what the Graph error 'Field X is not recognized' means). Resolve the real
+// internal names once from /columns and use them for both reads and writes.
+async function resolveAnnouncementColumns(listId){
+  if (state.annCols) return state.annCols;
+  const cols = await graphGet(
+    `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${listId}/columns`
+  );
+  const all = cols.value || [];
+  const find = (candidates) => {
+    const want = candidates.map(c => c.toLowerCase());
+    const hit = all.find(c =>
+      want.includes((c.displayName || '').trim().toLowerCase()) ||
+      want.includes((c.name || '').trim().toLowerCase()));
+    return hit ? hit.name : null;
+  };
+  state.annCols = {
+    desc: find(['Description', 'Details', 'Body', 'Announcement']),
+    icon: find(['Icon', 'Emoji']),
+  };
+  return state.annCols;
+}
+
+// The Announcements list template stores Body as rich text (HTML) — strip tags
+// for display so markup doesn't show as literal text.
+function stripHtmlTags(s){
+  return String(s == null ? '' : s).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 async function loadAnnouncements(){
   const listEl = document.getElementById('announcements-list');
   if (!listEl) return;
   try {
     const listId = await resolveAnnouncementsListId();
     if (!listId){ renderAnnouncementsFallback(); return; }
+    try { await resolveAnnouncementColumns(listId); }
+    catch(e){ console.warn('Announcement column resolve failed:', e.message); }
     const items = await graphGetAll(
       `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${listId}/items?expand=fields`
     );
@@ -1216,11 +1284,13 @@ function renderAnnouncements(){
     return;
   }
 
+  const cols = state.annCols || {};
   listEl.innerHTML = state.announcements.map(item => {
     const f = item.fields || {};
-    const icon = cellText(f.Icon) || '📣';
+    const icon = cellText(cols.icon ? f[cols.icon] : f.Icon) || '📣';
     const title = escHtml(cellText(f.Title) || '(untitled)');
-    const desc = escHtml(cellText(f.Description) || '');
+    const rawDesc = cellText(cols.desc ? f[cols.desc] : f.Description) || '';
+    const desc = escHtml(stripHtmlTags(rawDesc));
     const posted = item.createdDateTime ? 'Posted ' + formatDateShort(new Date(item.createdDateTime)) : '';
     const removeBtn = canEdit
       ? `<button class="ann-x" title="Remove announcement" onclick="removeAnnouncement('${item.id}')">×</button>`
@@ -1278,11 +1348,28 @@ async function submitAnnouncement(){
     return;
   }
 
+  let cols = state.annCols;
+  if (!cols){
+    try { cols = await resolveAnnouncementColumns(listId); }
+    catch(e){ cols = { desc:null, icon:null }; }
+  }
+
+  const desc = descEl.value.trim();
+  const icon = iconEl.value.trim();
+  if (desc && !cols.desc){
+    showToast('The announcements list has no Description column — add a text column named “Description” in SharePoint, or post without details.', 'error');
+    return;
+  }
+
+  const fields = { Title: title };
+  if (cols.desc && desc) fields[cols.desc] = desc;
+  if (cols.icon && icon) fields[cols.icon] = icon;
+
   btn.disabled = true; btn.textContent = 'Posting…'; showLoading(true);
   try {
     await graphPost(
       `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${listId}/items`,
-      { fields: { Title: title, Description: descEl.value.trim(), Icon: iconEl.value.trim() } }
+      { fields }
     );
     showToast('Announcement posted ✓', 'success');
     iconEl.value = ''; titleEl.value = ''; descEl.value = '';
@@ -1316,6 +1403,10 @@ async function removeAnnouncement(itemId){
 function switchTab(tabName){
   // Guard: Operations Center is restricted regardless of how switchTab is called
   if (tabName === 'operations-center' && !hasOpsCenterAccess()) {
+    return;
+  }
+  // Guard: Leadership is restricted the same way
+  if (tabName === 'leadership' && !hasLeadershipAccess()) {
     return;
   }
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabName));
