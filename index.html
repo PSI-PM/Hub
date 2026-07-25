@@ -259,6 +259,33 @@ button { cursor:pointer; font-family:inherit; }
 .invc-btn:hover { opacity:0.9; }
 .invc-btn:disabled { opacity:0.5; cursor:not-allowed; }
 
+/* ── VENDOR EXPENSES ── */
+.exp-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:14px; }
+.exp-stat { background:rgba(0,40,120,0.1); border:0.5px solid rgba(0,140,255,0.15); border-radius:10px; padding:12px 14px; }
+.exp-stat .k { font-size:10px; color:var(--gray-500); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:4px; }
+.exp-stat .v { font-family:"Playfair Display",serif; font-size:20px; color:var(--gray-900); }
+.exp-stat .v small { font-family:"Source Sans 3",sans-serif; font-size:11px; color:var(--gray-500); font-weight:400; }
+.exp-stat.save .v { color:var(--yellow); }
+.exp-controls { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+.exp-search { flex:1; min-width:180px; padding:9px 12px; border-radius:8px; border:1.5px solid var(--card-border); background:rgba(0,40,120,0.1); color:var(--gray-900); font-size:13px; outline:none; font-family:inherit; }
+.exp-search:focus { border-color:rgba(0,180,255,0.5); }
+.chip { padding:8px 14px; border-radius:20px; border:0.5px solid rgba(0,140,255,0.25); background:rgba(0,40,120,0.1); color:var(--gray-500); font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; transition:all 0.15s; }
+.chip:hover { color:var(--gray-700); border-color:rgba(0,180,255,0.4); }
+.chip.on { background:var(--blue-light); border-color:rgba(0,160,255,0.45); color:var(--blue); }
+.exp-row { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:12px 16px; background:rgba(0,60,180,0.08); border:0.5px solid var(--card-border); border-radius:12px; margin-bottom:8px; }
+.exp-main { flex:1; min-width:0; }
+.exp-vendor { font-family:"Playfair Display",serif; font-size:15px; color:var(--gray-900); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.exp-sub { font-size:11.5px; color:var(--gray-500); margin-top:3px; line-height:1.5; }
+.exp-sub .rem { color:var(--gray-400); }
+.exp-amt { text-align:right; flex-shrink:0; }
+.exp-amt .n { font-family:"Playfair Display",serif; font-size:17px; color:var(--gray-900); }
+.exp-amt .cyc { font-size:10.5px; color:var(--gray-500); }
+.pill.exp-active { background:var(--blue-light); color:var(--blue); }
+.pill.exp-cancel { background:var(--yellow-light); color:var(--yellow); }
+.pill.exp-canceled { background:var(--red-light); color:var(--red); }
+.exp-foot { font-size:11px; color:var(--gray-500); margin-top:10px; }
+@media (max-width:640px){ .exp-stats { grid-template-columns:1fr; } }
+
 /* ── MAIN ── */
 #screen-app {
   background:
@@ -711,12 +738,20 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
         </div>
       </div>
 
-      <!-- VENDOR DOCUMENTS -->
-      <div class="card pending" style="margin-bottom:18px;">
-        <h2>Vendor documents <span class="pending-tag">⏳ Not yet built</span></h2>
-        <div class="pending-body">
-          Placeholder — needs a real conversation about where vendor documents currently live and what instructors/staff actually need from this section.
+      <!-- VENDOR EXPENSES -->
+      <div class="card" style="margin-bottom:18px;">
+        <h2>Vendor expenses</h2>
+        <p style="font-size:12.5px;color:var(--gray-500);margin-bottom:14px;">Every recurring vendor cost — subscriptions, licenses, insurance, and fees — with billing cycle, renewal timing, and current status. Search by vendor or filter by status. Edit the EXPENSES list in this file to update; totals recalculate automatically.</p>
+        <div class="exp-stats" id="exp-stats"></div>
+        <div class="exp-controls">
+          <input class="exp-search" id="exp-search" placeholder="Search vendors…" oninput="renderVendorExpenses()" autocomplete="off">
+          <button class="chip on" data-f="all" onclick="setExpenseFilter(this)">All</button>
+          <button class="chip" data-f="active" onclick="setExpenseFilter(this)">Active</button>
+          <button class="chip" data-f="cancelplan" onclick="setExpenseFilter(this)">Looking to cancel</button>
+          <button class="chip" data-f="canceled" onclick="setExpenseFilter(this)">Canceled</button>
         </div>
+        <div id="exp-rows"></div>
+        <div class="exp-foot">Sorted by annualized cost. Amounts shown as recorded in the expense log; monthly items are annualized only in the totals above. Canceled items are excluded from totals.</div>
       </div>
 
       <!-- INTERNAL POLICIES -->
@@ -835,6 +870,34 @@ const CLASS_MANAGEMENT = [
 
 const ADMIN_LINKS = [
   { icon: "📁", label: "SharePoint site", url: "https://psiprojectmanagement.sharepoint.com/sites/PSIProjectManagement" }
+];
+
+// Vendor expenses — EDIT BY HAND to update the Operations Center card.
+// cycle: 'yr' or 'mo' (monthly items are annualized in the summary totals).
+// status: 'active' | 'cancelplan' | 'canceled' (canceled excluded from totals).
+const EXPENSES = [
+  { vendor:'PMI ATP', desc:'', billing:'Annual June 30', amount:10000, cycle:'yr', status:'active', remarks:'' },
+  { vendor:'LMS', desc:'', billing:'Annual, August', amount:6400, cycle:'yr', status:'active', remarks:'Cost will increase to $6,700 for 400 students' },
+  { vendor:'Mcgriff Insurance', desc:'Liability Ins', billing:'Annual 10/25', amount:1758, cycle:'yr', status:'active', remarks:'Definitely keep — hard to find an insurance company.' },
+  { vendor:'SC Commission on Higher Education', desc:'', billing:'Annual June 30', amount:1700, cycle:'yr', status:'active', remarks:'Will increase as revenue goes up' },
+  { vendor:'Quickbooks', desc:'', billing:'Monthly', amount:130, cycle:'mo', status:'active', remarks:'Used for Billing' },
+  { vendor:'Microsoft Office', desc:'Eight subscribers', billing:'Monthly, 29th', amount:135, cycle:'mo', status:'active', remarks:'Looking to expand to 10 subscribers' },
+  { vendor:'Zoom', desc:'Six subscribers', billing:'Annual 6/4/27', amount:1017, cycle:'yr', status:'cancelplan', remarks:'' },
+  { vendor:'Bond Exchange', desc:'Bond', billing:'Annual 10/21', amount:350, cycle:'yr', status:'active', remarks:'Required by SC Academic' },
+  { vendor:'Godaddy', desc:'Managed SSL 2 Years', billing:'Annual Nov 20 (26)', amount:400, cycle:'yr', status:'cancelplan', remarks:'' },
+  { vendor:'Godaddy', desc:'Website Security', billing:'Annual 10/16/26', amount:385, cycle:'yr', status:'cancelplan', remarks:'' },
+  { vendor:'Mail Chimp', desc:'', billing:'Monthly (8th)', amount:28, cycle:'mo', status:'active', remarks:'Why and what do we use this for?' },
+  { vendor:'Adobe', desc:'', billing:'Monthly (9th)', amount:30, cycle:'mo', status:'cancelplan', remarks:'' },
+  { vendor:'Godaddy', desc:'Woo Commerce', billing:'Annual 3/31/26', amount:324, cycle:'yr', status:'cancelplan', remarks:'' },
+  { vendor:'Heyzine', desc:'', billing:'Annual 3/15', amount:203, cycle:'yr', status:'active', remarks:'Used for Digital Flipbooks' },
+  { vendor:'Godaddy', desc:'Standard SSL 1 Year', billing:'Annual Nov 19 (26)', amount:200, cycle:'yr', status:'cancelplan', remarks:'' },
+  { vendor:'Instadoodle', desc:'', billing:'Annual 3/1', amount:165, cycle:'yr', status:'active', remarks:'1 time payment' },
+  { vendor:'Calendy', desc:'', billing:'Annual 4/5', amount:103, cycle:'yr', status:'cancelplan', remarks:'' },
+  { vendor:'Sketchwow', desc:'', billing:'Annual 3/1', amount:49, cycle:'yr', status:'active', remarks:'1 time payment' },
+  { vendor:'Godaddy', desc:'PSIPM.com Domain', billing:'Nov 21 (29)', amount:15, cycle:'yr', status:'cancelplan', remarks:'' },
+  { vendor:'Godaddy', desc:'PSIMP.Net Domain', billing:'Nov 21 (29)', amount:15, cycle:'yr', status:'cancelplan', remarks:'' },
+  { vendor:'Jotform', desc:'', billing:'Annual 5/13', amount:500, cycle:'yr', status:'canceled', remarks:'' },
+  { vendor:'Dropbox', desc:'', billing:'Annual 3/30', amount:130, cycle:'yr', status:'canceled', remarks:'' },
 ];
 
 const CLIENT_OPTIONS = [
@@ -1091,6 +1154,7 @@ function switchTab(tabName){
     loadInvoiceContacts();
     renderInvoicingClasses();
     initOpsSearch();
+    renderVendorExpenses();
   }
 }
 
@@ -1470,6 +1534,75 @@ async function downloadEnrollment(courseId, btn){
   }
 }
 
+// ── VENDOR EXPENSES (Operations Center) ────────────────────────────
+// Renders the hand-edited EXPENSES array. Totals are computed at render time,
+// so editing the array is all it takes to keep the card current.
+const EXP_LABELS = { active:'Active', cancelplan:'Looking to cancel', canceled:'Canceled' };
+const EXP_PILLS  = { active:'exp-active', cancelplan:'exp-cancel', canceled:'exp-canceled' };
+let expenseFilter = 'all';
+
+function setExpenseFilter(btn){
+  expenseFilter = btn.dataset.f;
+  document.querySelectorAll('.exp-controls .chip').forEach(c => c.classList.toggle('on', c === btn));
+  renderVendorExpenses();
+}
+function expenseAnnualized(e){ return e.cycle === 'mo' ? e.amount * 12 : e.amount; }
+function fmtMoney(n){ return '$' + Math.round(n).toLocaleString('en-US'); }
+
+function renderVendorExpenses(){
+  const statsEl = document.getElementById('exp-stats');
+  const rowsEl = document.getElementById('exp-rows');
+  if (!statsEl || !rowsEl) return;
+
+  // Summary totals — always across the full list, independent of search/filter
+  const notCanceled = EXPENSES.filter(e => e.status !== 'canceled');
+  const flagged = EXPENSES.filter(e => e.status === 'cancelplan');
+  const estAnnual = notCanceled.reduce((t,e) => t + expenseAnnualized(e), 0);
+  const flaggedAnnual = flagged.reduce((t,e) => t + expenseAnnualized(e), 0);
+  const nActive = EXPENSES.filter(e => e.status === 'active').length;
+  const nCanceled = EXPENSES.filter(e => e.status === 'canceled').length;
+
+  statsEl.innerHTML = `
+    <div class="exp-stat">
+      <div class="k">Est. annual spend</div>
+      <div class="v">${fmtMoney(estAnnual)} <small>excl. canceled</small></div>
+    </div>
+    <div class="exp-stat save">
+      <div class="k">Flagged to cancel</div>
+      <div class="v">${fmtMoney(flaggedAnnual)} <small>/yr across ${flagged.length} item${flagged.length!==1?'s':''}</small></div>
+    </div>
+    <div class="exp-stat">
+      <div class="k">Line items</div>
+      <div class="v">${EXPENSES.length} <small>${nActive} active · ${flagged.length} flagged · ${nCanceled} canceled</small></div>
+    </div>`;
+
+  const q = (document.getElementById('exp-search')?.value || '').trim().toLowerCase();
+  let rows = EXPENSES.slice().sort((a,b) => expenseAnnualized(b) - expenseAnnualized(a));
+  if (expenseFilter !== 'all') rows = rows.filter(e => e.status === expenseFilter);
+  if (q) rows = rows.filter(e => (e.vendor + ' ' + e.desc + ' ' + e.remarks).toLowerCase().includes(q));
+
+  if (!rows.length){
+    rowsEl.innerHTML = `<div class="empty-state">No expenses match.</div>`;
+    return;
+  }
+
+  rowsEl.innerHTML = rows.map(e => {
+    const bits = [e.desc, e.billing].filter(Boolean).map(escHtml).join(' · ');
+    const rem = e.remarks ? ` <span class="rem">— ${escHtml(e.remarks)}</span>` : '';
+    return `
+      <div class="exp-row">
+        <div class="exp-main">
+          <div class="exp-vendor">${escHtml(e.vendor)} <span class="pill ${EXP_PILLS[e.status] || ''}">${EXP_LABELS[e.status] || escHtml(e.status)}</span></div>
+          <div class="exp-sub">${bits}${rem}</div>
+        </div>
+        <div class="exp-amt">
+          <div class="n">${fmtMoney(e.amount)}</div>
+          <div class="cyc">${e.cycle === 'mo' ? 'per month' : 'per year'}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
 // Close dropdowns if user clicks outside
 document.addEventListener('click', (e) => {
   const courseWrap = document.getElementById('single-course-wrap');
@@ -1493,6 +1626,11 @@ async function loadDashboardData(){
     ]);
     state.courses = coursesData || [];
     state.students = allStudents;
+
+    // Resolve the status/email/phone columns before rendering so headcounts can
+    // exclude withdrawn students. Non-fatal: if it fails, counts show the total.
+    try { await ensureStudentFieldMap(allStudents); }
+    catch(e){ console.warn('Student field map resolve failed — counts will include withdrawn:', e.message); }
 
     renderUpcomingClasses();
     renderInstructorAssignments();
@@ -1540,6 +1678,20 @@ function coursesForStudent(student){
 }
 function studentCountForCourse(course){
   return studentsForCourse(course).length;
+}
+// True if the student's status column reads exactly 'Withdrawn' — same rule the
+// enrollment export uses. If the status column hasn't been resolved (or can't
+// be), nobody is treated as withdrawn and counts fall back to the full total.
+function isWithdrawnStudent(f){
+  const map = _studentFieldMap;
+  if (!map || !map.status) return false;
+  const v = f[map.status];
+  const val = (typeof v === 'object' && v) ? v.Value : v;
+  return val === 'Withdrawn';
+}
+// Headcount for dashboard displays: enrolled minus withdrawn.
+function activeStudentCountForCourse(course){
+  return studentsForCourse(course).filter(s => !isWithdrawnStudent(s.fields)).length;
 }
 
 // ── MY UPCOMING CLASSES (Instructor Center) ─────
@@ -1591,7 +1743,7 @@ function renderMyUpcomingClasses(){
     const status = fieldVal(f, 'Status');
     const start = f.StartDate ? formatDateShort(new Date(f.StartDate)) : '—';
     const end = f.EndDate ? formatDateShort(new Date(f.EndDate)) : '—';
-    const count = studentCountForCourse(c);
+    const count = activeStudentCountForCourse(c);
     const filesUrl = trainingRecordsUrl(f.Title);
     const filesLink = filesUrl
       ? `<a href="${filesUrl}" target="_blank" rel="noopener" style="color:var(--blue);font-weight:600;">Open &rarr;</a>`
@@ -2214,7 +2366,7 @@ function renderUpcomingClasses(){
     const status = fieldVal(f, 'Status');
     const start = f.StartDate ? formatDateShort(new Date(f.StartDate)) : '—';
     const end = f.EndDate ? formatDateShort(new Date(f.EndDate)) : '—';
-    const count = studentCountForCourse(c);
+    const count = activeStudentCountForCourse(c);
     return `
       <tr>
         <td class="course">${courseType}</td>
