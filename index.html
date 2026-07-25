@@ -683,6 +683,8 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
         <div id="ops-search-results"></div>
       </div>
 
+      <div class="section-label-sm">Enrollment</div>
+
       <!-- STUDENT ENROLLMENT -->
       <div class="row two-1-6-1">
 
@@ -750,6 +752,15 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
           <button class="btn-submit-form" id="single-add-btn" onclick="submitSingleStudent()">Add student</button>
         </div>
 
+      </div>
+
+      <!-- MASTER STUDENT LIST -->
+      <div class="card" style="margin-bottom:18px;">
+        <h2>Master student list</h2>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;">
+          <p style="font-size:12.5px;color:var(--gray-500);flex:1;min-width:220px;">Download the complete Students list from SharePoint as an Excel file — every student on record with name, email, phone, status, class, and client. Pulled fresh at the moment you click.</p>
+          <button class="invc-btn" id="master-list-btn" onclick="downloadMasterStudentList(this)">Master List</button>
+        </div>
       </div>
 
       <!-- CLASS INVOICING -->
@@ -820,10 +831,24 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
       </div>
 
       <!-- LEADERSHIP SECTIONS -->
-      <div class="card pending">
-        <h2>Nothing here yet <span class="pending-tag">⏳ Ready to build</span></h2>
+      <div class="card pending" style="margin-bottom:18px;">
+        <h2>Instructor Survey Results <span class="pending-tag">⏳ Ready to build</span></h2>
         <div class="pending-body">
-          This tab is wired up and restricted to the leadership allowlist. Decide what should live here — financial dashboards, strategic documents, board materials — and it gets added one card at a time.
+          Section reserved. Point this at wherever survey responses land — a Microsoft Forms results file, an Excel export, or a SharePoint list — and it can show per-instructor results here.
+        </div>
+      </div>
+
+      <div class="card pending" style="margin-bottom:18px;">
+        <h2>Instructor MOUs <span class="pending-tag">⏳ Ready to build</span></h2>
+        <div class="pending-body">
+          Section reserved. Once instructor MOUs live in a SharePoint document library, this can list each instructor's agreement with a direct link — same pattern as Training Records.
+        </div>
+      </div>
+
+      <div class="card pending">
+        <h2>Instructor Resume / LinkedIn Profiles <span class="pending-tag">⏳ Ready to build</span></h2>
+        <div class="pending-body">
+          Section reserved. This can show a card per instructor with a resume link (SharePoint file) and LinkedIn profile — needs either a document library or a simple list holding those links.
         </div>
       </div>
 
@@ -914,13 +939,13 @@ const IMPORTANT_DATES = [
 ];
 
 const CONTACTS = [
-  { initials: "RM", name: "Roy Mathena", role: "Owner", email: "RoyM@psipm.com" },
-  { initials: "JY", name: "Jerry Youngblood", role: "Senior Instructor", email: "JerryY@psipm.com" },
-  { initials: "SJ", name: "Scott Johnson", role: "Executive VP", email: "ScottJ@psipm.com" },
-  { initials: "WP", name: "Wanda Peery", role: "Operations Manager", email: "WandaP@psipm.com" },
-  { initials: "MP", name: "Marcia Porchia", role: "Instructor", email: "MarciaP@psipm.com" },
-  { initials: "AH", name: "Amy Hamilton", role: "Instructor", email: "AmyH@psipm.com" },
-  { initials: "AJ", name: "Amber Johnson", role: "Finance Manager", email: "AmberJ@psipm.com" }
+  { initials: "RM", name: "Roy Mathena", role: "Owner", email: "RoyM@psipm.com", phone: "864-915-7808" },
+  { initials: "JY", name: "Jerry Youngblood", role: "Senior Instructor", email: "JerryY@psipm.com", phone: "704-770-6413" },
+  { initials: "SJ", name: "Scott Johnson", role: "Executive VP", email: "ScottJ@psipm.com", phone: "716-444-2205" },
+  { initials: "WP", name: "Wanda Peery", role: "Operations Manager", email: "WandaP@psipm.com", phone: "864-270-9688" },
+  { initials: "MP", name: "Marcia Porchia", role: "Instructor", email: "MarciaP@psipm.com", phone: "612-845-9936" },
+  { initials: "AH", name: "Amy Hamilton", role: "Instructor", email: "AmyH@psipm.com", phone: "571-778-8450" },
+  { initials: "AJ", name: "Amber Johnson", role: "Finance Manager", email: "AmberJ@psipm.com", phone: "716-949-7759" }
 ];
 
 const QUICK_LINKS = [
@@ -947,8 +972,7 @@ const CLASS_MANAGEMENT = [
   { icon: "📗", label: "CAPM LMS", url: "https://capm-psipm.talentlms.com/plus/login" },
   { icon: "✅", label: "Attendance Portal", url: "https://psi-pm.github.io/Attendance-Portal/" },
   { icon: "📝", label: "Application Review Tool", url: "https://psi-pm.github.io/pmp_application_review/" },
-  { icon: "📋", label: "Student Survey", url: "https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=9xl7nvIjAUOO4pN4dnhGSOTC-Jhnlb5DnihvjDuX4o1UNEQwSFhHODNDNUFVUkxERFBEOFJDUkY0VC4u" },
-  { icon: "🧭", label: "PMPathway", url: "https://psi-pm.github.io/pmpathway/" }
+  { icon: "📋", label: "Student Survey", url: "https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=9xl7nvIjAUOO4pN4dnhGSOTC-Jhnlb5DnihvjDuX4o1UNEQwSFhHODNDNUFVUkxERFBEOFJDUkY0VC4u" }
 ];
 
 const ADMIN_LINKS = [
@@ -1178,13 +1202,20 @@ function renderStaticSections(){
 
   // Important dates are loaded live from SharePoint in loadImportantDates()
 
-  // Contacts
-  const contactsList = document.getElementById('contacts-list');
-  contactsList.innerHTML = CONTACTS.map((c,i) => `
+  // Contacts — one renderer for both directories (Home + Instructor Center)
+  const contactRowHtml = (c, i) => {
+    const email = `<a href="mailto:${c.email}" style="color:var(--gray-500);font-size:11.5px;">${c.email}</a>`;
+    const phone = c.phone
+      ? ` <span style="color:var(--gray-500);font-size:11.5px;">·</span> <a href="tel:+1${String(c.phone).replace(/\D/g,'')}" style="color:var(--gray-500);font-size:11.5px;white-space:nowrap;">${c.phone}</a>`
+      : '';
+    return `
     <div class="person-row">
       <div class="avatar${i===0?'':' alt'}">${c.initials}</div>
-      <p><span class="name">${c.name}</span> — ${c.role}<br><a href="mailto:${c.email}" style="color:var(--gray-500);font-size:11.5px;">${c.email}</a></p>
-    </div>`).join('');
+      <p><span class="name">${c.name}</span> — ${c.role}<br>${email}${phone}</p>
+    </div>`;
+  };
+  const contactsList = document.getElementById('contacts-list');
+  contactsList.innerHTML = CONTACTS.map(contactRowHtml).join('');
 
   // Teaching resources (Instructor Center)
   const teachingGrid = document.getElementById('teaching-resources-grid');
@@ -1213,14 +1244,10 @@ function renderStaticSections(){
       </a>`).join('');
   }
 
-  // Instructor contacts (Instructor Center) — same data, different mount point
+  // Instructor contacts (Instructor Center) — same data and renderer
   const instructorContactsList = document.getElementById('instructor-contacts-list');
   if (instructorContactsList) {
-    instructorContactsList.innerHTML = CONTACTS.map((c,i) => `
-      <div class="person-row">
-        <div class="avatar${i===0?'':' alt'}">${c.initials}</div>
-        <p><span class="name">${c.name}</span> — ${c.role}<br><a href="mailto:${c.email}" style="color:var(--gray-500);font-size:11.5px;">${c.email}</a></p>
-      </div>`).join('');
+    instructorContactsList.innerHTML = CONTACTS.map(contactRowHtml).join('');
   }
 }
 
@@ -2812,6 +2839,70 @@ async function toggleClassRoster(idx){
       </table>
     </div>`;
   body.dataset.loaded = '1';
+}
+
+// ── MASTER STUDENT LIST EXPORT ─────────────────────────────────────
+// Downloads the entire SharePoint Students list as an Excel file. Fetched
+// fresh at click time (not the copy loaded at sign-in), includes everyone —
+// withdrawn students appear with their status rather than being dropped —
+// and enriches each row with class and client the same way the lookup does.
+async function downloadMasterStudentList(btn){
+  const originalLabel = btn ? btn.textContent : '';
+  if (btn){ btn.disabled = true; btn.textContent = 'Building…'; }
+  showLoading(true);
+
+  try {
+    const students = await graphGetAll(
+      `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.studentsListId}/items?expand=fields`
+    );
+    if (!students.length){
+      showToast('The Students list came back empty.', 'error');
+      return;
+    }
+    const map = await ensureStudentFieldMap(students);
+
+    const rows = students.map(s => {
+      const f = s.fields || {};
+      // Class codes: matched Courses rows, plus legacy/plain course fields (deduped)
+      const codes = [];
+      const push = (v) => {
+        const t = String(v == null ? '' : v).trim();
+        if (t && !codes.some(x => x.toLowerCase() === t.toLowerCase())) codes.push(t);
+      };
+      const myCourses = coursesForStudent(s);
+      myCourses.forEach(c => push(c.fields.Title));
+      push(cellText(f.LegacyCourseCode));
+      push(fieldVal(f, 'Course'));
+
+      return {
+        name: cellText(f.Title) || '',
+        email: map.email ? cellText(f[map.email]) : '',
+        phone: map.phone ? cellText(f[map.phone]) : '',
+        status: map.status ? cellText(f[map.status]) : '',
+        klass: codes.join(', '),
+        client: myCourses.length ? (fieldVal(myCourses[0].fields, 'Partner') || '') : '',
+      };
+    }).sort((a,b) => a.name.localeCompare(b.name));
+
+    const aoa = [
+      ['Name','Email','Phone','Status','Class','Client'],
+      ...rows.map(r => [r.name, r.email, r.phone, r.status, r.klass, r.client]),
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{wch:28},{wch:32},{wch:16},{wch:12},{wch:24},{wch:24}];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Students');
+    const n = new Date();
+    const stamp = `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`;
+    XLSX.writeFile(wb, `Master_Student_List_${stamp}.xlsx`);
+    showToast(`Master list exported — ${rows.length} students.`, 'success');
+  } catch(e){
+    console.error('Master list export failed:', e);
+    showToast('Export failed: ' + e.message, 'error');
+  } finally {
+    showLoading(false);
+    if (btn){ btn.disabled = false; btn.textContent = originalLabel || 'Master List'; }
+  }
 }
 
 function renderUpcomingClasses(){
