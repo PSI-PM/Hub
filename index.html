@@ -757,9 +757,17 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
       <!-- MASTER STUDENT LIST -->
       <div class="card" style="margin-bottom:18px;">
         <h2>Master student list</h2>
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;">
-          <p style="font-size:12.5px;color:var(--gray-500);flex:1;min-width:220px;">Download the complete Students list from SharePoint as an Excel file — every student on record with name, email, phone, status, class, and client. Pulled fresh at the moment you click.</p>
-          <button class="invc-btn" id="master-list-btn" onclick="downloadMasterStudentList(this)">Master List</button>
+        <p style="font-size:12.5px;color:var(--gray-500);margin-bottom:14px;">Download the Students list from SharePoint as an Excel file — name, email, phone, status, class, client, and course dates. Pulled fresh at the moment you click. Optionally set a date range first to report only students whose class was running during that period; leave both blank for the complete list.</p>
+        <div style="display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap;">
+          <div class="form-field" style="min-width:150px;">
+            <label for="master-from">From (optional)</label>
+            <input type="date" id="master-from">
+          </div>
+          <div class="form-field" style="min-width:150px;">
+            <label for="master-to">To (optional)</label>
+            <input type="date" id="master-to">
+          </div>
+          <button class="invc-btn" id="master-list-btn" onclick="downloadMasterStudentList(this)" style="margin-bottom:2px;">Master List</button>
         </div>
       </div>
 
@@ -1882,6 +1890,12 @@ function cellText(v){
 function isEmailValue(v){ return typeof v === 'string' && /\S+@\S+\.\S+/.test(v); }
 function isPhoneValue(v){ return typeof v === 'string' && /(?:\d[\s\-().]*){7,}/.test(v); }
 function isStatusValue(v){ return ['Enrolled','Completed','In Progress','Withdrawn'].includes(v); }
+function isDateLikeValue(v){ return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v); }
+// Sniff guards: a date column must LOOK like a start/end column by name, so the
+// system timestamps every item carries (Modified, Created) can't be mistaken
+// for course dates.
+function isStartDateValue(v, key){ return isDateLikeValue(v) && /start|begin/i.test(key || ''); }
+function isEndDateValue(v, key){ return isDateLikeValue(v) && /(end|finish|complet)(?!.*status)/i.test(key || '') && !/status/i.test(key || ''); }
 
 // Resolve a Students-list column's internal name from candidate display names via
 // the /columns endpoint, then fall back to sniffing sample rows' values with a
@@ -1907,7 +1921,7 @@ async function resolveStudentsColumn(displayCandidates, sampleRows, validator){
       const fields = (s && s.fields) || {};
       for (const [k, v] of Object.entries(fields)){
         const val = (typeof v === 'object' && v) ? v.Value : v;
-        if (validator(val)){ _studentsColCache[cacheKey] = k; return k; }
+        if (validator(val, k)){ _studentsColCache[cacheKey] = k; return k; }
       }
     }
   }
@@ -2562,6 +2576,10 @@ async function ensureStudentFieldMap(sampleRows){
     status: await resolveStudentsColumn(['Completion Status','Status','Enrollment Status'], rows, isStatusValue),
     email:  await resolveStudentsColumn(['Email','Email Address','E-mail','Student Email'], rows, isEmailValue),
     phone:  await resolveStudentsColumn(['Phone','Phone Number','Cell','Mobile','Cell Phone','Telephone'], rows, isPhoneValue),
+    // Course dates stored ON the student record (the legacy import carried
+    // these) — used when a student has no matching Courses-list row.
+    start:  await resolveStudentsColumn(['Start Date','StartDate','Course Start','Class Start','Class Start Date','Begin Date'], rows, isStartDateValue),
+    end:    await resolveStudentsColumn(['End Date','EndDate','Course End','Class End','Class End Date','Finish Date'], rows, isEndDateValue),
   };
   return _studentFieldMap;
 }
@@ -2874,6 +2892,18 @@ async function downloadMasterStudentList(btn){
       push(cellText(f.LegacyCourseCode));
       push(fieldVal(f, 'Course'));
 
+      // Dates: the Students list's own Start/End columns are the authority —
+      // the date-range report filters on exactly what's on the student record.
+      // A matched Courses row only fills the gap when a record has no dates.
+      // Parsed as calendar days so UTC-midnight can't shift them backward.
+      const cf = myCourses.length ? myCourses[0].fields : null;
+      const startD =
+        (map.start ? parseDateOnly(cellText(f[map.start])) : null) ||
+        (cf && cf.StartDate ? parseDateOnly(cf.StartDate) : null);
+      const endD =
+        (map.end ? parseDateOnly(cellText(f[map.end])) : null) ||
+        (cf && cf.EndDate ? parseDateOnly(cf.EndDate) : null);
+
       return {
         name: cellText(f.Title) || '',
         email: map.email ? cellText(f[map.email]) : '',
@@ -2881,21 +2911,53 @@ async function downloadMasterStudentList(btn){
         status: map.status ? cellText(f[map.status]) : '',
         klass: codes.join(', '),
         client: myCourses.length ? (fieldVal(myCourses[0].fields, 'Partner') || '') : '',
+        startD, endD,
       };
     }).sort((a,b) => a.name.localeCompare(b.name));
 
+    // Optional date-range report: keep students whose course was RUNNING at any
+    // point in the window (start <= window end AND end >= window start; a course
+    // with no end date is treated as one day). Students with no course dates
+    // can't be placed in time, so they only appear in unfiltered exports.
+    const fromVal = document.getElementById('master-from')?.value || '';
+    const toVal = document.getElementById('master-to')?.value || '';
+    const from = fromVal ? parseDateOnly(fromVal) : null;
+    const to = toVal ? parseDateOnly(toVal) : null;
+    if (from && to && from > to){
+      showToast('The From date is after the To date — swap them and try again.', 'error');
+      return;
+    }
+    let exportRows = rows;
+    if (from || to){
+      exportRows = rows.filter(r => {
+        if (!r.startD && !r.endD) return false;         // undatable → excluded from ranged reports
+        const s = r.startD || r.endD;
+        const e = r.endD || r.startD;
+        if (from && e < from) return false;
+        if (to && s > to) return false;
+        return true;
+      });
+      if (!exportRows.length){
+        showToast('No students had a class running in that date range.', 'error');
+        return;
+      }
+    }
+
     const aoa = [
-      ['Name','Email','Phone','Status','Class','Client'],
-      ...rows.map(r => [r.name, r.email, r.phone, r.status, r.klass, r.client]),
+      ['Name','Email','Phone','Status','Class','Client','Start Date','End Date'],
+      ...exportRows.map(r => [r.name, r.email, r.phone, r.status, r.klass, r.client, r.startD || '', r.endD || '']),
     ];
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = [{wch:28},{wch:32},{wch:16},{wch:12},{wch:24},{wch:24}];
+    // cellDates makes Start/End real Excel dates, so Excel's date filter
+    // (year/month grouping) works instead of treating them as text.
+    const ws = XLSX.utils.aoa_to_sheet(aoa, { cellDates: true });
+    ws['!cols'] = [{wch:28},{wch:32},{wch:16},{wch:12},{wch:24},{wch:24},{wch:12},{wch:12}];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Students');
     const n = new Date();
     const stamp = `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`;
-    XLSX.writeFile(wb, `Master_Student_List_${stamp}.xlsx`);
-    showToast(`Master list exported — ${rows.length} students.`, 'success');
+    const rangeTag = (from || to) ? `_${fromVal || 'start'}_to_${toVal || 'present'}` : `_${stamp}`;
+    XLSX.writeFile(wb, `Master_Student_List${rangeTag}.xlsx`);
+    showToast(`${(from || to) ? 'Report' : 'Master list'} exported — ${exportRows.length} student${exportRows.length!==1?'s':''}.`, 'success');
   } catch(e){
     console.error('Master list export failed:', e);
     showToast('Export failed: ' + e.message, 'error');
