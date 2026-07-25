@@ -557,8 +557,24 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
         </div>
       </div>
       <div class="card">
-        <h2>Important dates</h2>
-        <div id="important-dates-list"></div>
+        <h2>Important dates <button class="ann-add-btn" id="impd-add-toggle" style="display:none;" onclick="toggleDateForm()">+ Add</button></h2>
+        <div class="ann-form" id="impd-form" style="display:none;">
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="impd-date">Date</label>
+              <input type="date" id="impd-date">
+            </div>
+            <div class="form-field">
+              <label for="impd-label">What's happening</label>
+              <input type="text" id="impd-label" placeholder="e.g. ATP annual renewal due">
+            </div>
+          </div>
+          <button class="btn-submit-form" id="impd-post-btn" onclick="submitImportantDate()">Add date</button>
+        </div>
+        <div id="important-dates-list">
+          <div class="skeleton-line" style="width:90%"></div>
+          <div class="skeleton-line" style="width:70%"></div>
+        </div>
       </div>
     </div>
 
@@ -837,6 +853,7 @@ const CONFIG = {
   rosterDropZoneOwner: 'scottj@psipm.com',
   rosterDropZonePath: 'Roster Drop Zone',
   announcementsListName: 'Hub Announcements',
+  importantDatesListName: 'Hub Important Dates',
 };
 
 const SCOPES = ['Sites.ReadWrite.All','User.Read'];
@@ -888,6 +905,8 @@ const ANNOUNCEMENTS = [
   }
 ];
 
+// Fallback only — shown if the 'Hub Important Dates' SharePoint list doesn't
+// exist yet. Once created, dates are managed on-screen like announcements.
 const IMPORTANT_DATES = [
   { date: "Jul 4",  label: "Office closed — holiday" },
   { date: "Jul 15", label: "ATP annual renewal due" },
@@ -990,7 +1009,7 @@ const msalApp = new msal.PublicClientApplication({
   cache: { cacheLocation: 'sessionStorage' },
 });
 
-let state = { user: null, courses: [], students: [], availability: [], announcements: [], announcementsListId: null, annCols: null };
+let state = { user: null, courses: [], students: [], availability: [], announcements: [], announcementsListId: null, annCols: null, importantDates: [], importantDatesListId: null, datesCols: null };
 
 // ── UTILS ───────────────────────────────────────
 function showScreen(id){
@@ -1064,7 +1083,7 @@ async function getToken(){
   }
 }
 function handleLogout(){
-  state = { user:null, courses:[], students:[], availability:[], announcements:[], announcementsListId:null, annCols:null };
+  state = { user:null, courses:[], students:[], availability:[], announcements:[], announcementsListId:null, annCols:null, importantDates:[], importantDatesListId:null, datesCols:null };
   msalApp.logoutRedirect({ postLogoutRedirectUri: window.location.href });
 }
 
@@ -1134,6 +1153,8 @@ function enterApp(){
   // (UI-only gating — SharePoint list permissions are the real authority.)
   const annBtn = document.getElementById('ann-add-toggle');
   if (annBtn) annBtn.style.display = hasOpsCenterAccess() ? '' : 'none';
+  const impdBtn = document.getElementById('impd-add-toggle');
+  if (impdBtn) impdBtn.style.display = hasOpsCenterAccess() ? '' : 'none';
 
   const leadTabBtn = document.querySelector('.tab-btn[data-tab="leadership"]');
   if (leadTabBtn) {
@@ -1155,11 +1176,7 @@ function renderStaticSections(){
       <span class="ic">${q.icon}</span>${q.label}
     </a>`).join('');
 
-  // Important dates
-  const datesList = document.getElementById('important-dates-list');
-  datesList.innerHTML = IMPORTANT_DATES.map(d => `
-    <div class="date-row"><span class="date">${d.date}</span><span class="label">${d.label}</span></div>
-  `).join('') || `<div class="empty-state">No upcoming dates.</div>`;
+  // Important dates are loaded live from SharePoint in loadImportantDates()
 
   // Contacts
   const contactsList = document.getElementById('contacts-list');
@@ -1393,6 +1410,179 @@ async function removeAnnouncement(itemId){
     );
     showToast('Announcement removed ✓', 'success');
     await loadAnnouncements();
+  } catch(e){
+    showToast('Failed to remove: ' + e.message, 'error');
+  }
+  showLoading(false);
+}
+
+// ── IMPORTANT DATES (live, editable from the Home tab) ─────────────
+// Same pattern as announcements: a SharePoint list found BY NAME
+// (CONFIG.importantDatesListName) with internal column names resolved at
+// runtime. Create a list called 'Hub Important Dates' with a Date column
+// named 'Date'; the label is the built-in Title. Until then, the hardcoded
+// IMPORTANT_DATES array renders as a read-only fallback.
+// Display rule: only today-forward, sorted soonest first — past dates
+// retire themselves.
+async function resolveImportantDatesListId(){
+  if (state.importantDatesListId) return state.importantDatesListId;
+  const lists = await graphGetAll(`/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists?$select=id,displayName`);
+  const want = CONFIG.importantDatesListName.trim().toLowerCase();
+  const hit = (lists || []).find(l => (l.displayName || '').trim().toLowerCase() === want);
+  if (!hit) return null;
+  state.importantDatesListId = hit.id;
+  return hit.id;
+}
+
+async function resolveImportantDatesColumns(listId){
+  if (state.datesCols) return state.datesCols;
+  const cols = await graphGet(
+    `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${listId}/columns`
+  );
+  const all = cols.value || [];
+  const want = ['date','when','event date','due date','due'];
+  const hit = all.find(c =>
+    want.includes((c.displayName || '').trim().toLowerCase()) ||
+    want.includes((c.name || '').trim().toLowerCase()));
+  state.datesCols = { date: hit ? hit.name : null };
+  return state.datesCols;
+}
+
+// Parse a date-only value without the UTC-midnight off-by-one: '2026-07-04'
+// must render as Jul 4 in every US timezone.
+function parseDateOnly(v){
+  const s = String(v || '').slice(0, 10);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+  const d = new Date(v);
+  return isNaN(d) ? null : d;
+}
+function todayDateOnly(){
+  const n = new Date();
+  return new Date(n.getFullYear(), n.getMonth(), n.getDate());
+}
+
+async function loadImportantDates(){
+  const listEl = document.getElementById('important-dates-list');
+  if (!listEl) return;
+  try {
+    const listId = await resolveImportantDatesListId();
+    if (!listId){ renderImportantDatesFallback(); return; }
+    try { await resolveImportantDatesColumns(listId); }
+    catch(e){ console.warn('Important dates column resolve failed:', e.message); }
+    const items = await graphGetAll(
+      `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${listId}/items?expand=fields`
+    );
+    state.importantDates = items || [];
+    renderImportantDates();
+  } catch(e){
+    console.error('Important dates load failed:', e);
+    renderImportantDatesFallback();
+  }
+}
+
+function renderImportantDates(){
+  const listEl = document.getElementById('important-dates-list');
+  if (!listEl) return;
+  const canEdit = hasOpsCenterAccess();
+  const dateCol = state.datesCols?.date || null;
+
+  let rows = state.importantDates.map(item => {
+    const f = item.fields || {};
+    const d = dateCol ? parseDateOnly(cellText(f[dateCol])) : null;
+    return { id: item.id, d, label: cellText(f.Title) || '(untitled)' };
+  });
+
+  if (dateCol){
+    const today = todayDateOnly();
+    rows = rows.filter(r => !r.d || r.d >= today);          // past dates retire
+    rows.sort((a,b) => (a.d?.getTime() ?? Infinity) - (b.d?.getTime() ?? Infinity));
+  }
+
+  if (!rows.length){
+    listEl.innerHTML = `<div class="empty-state">No upcoming dates.${canEdit ? ' Use “+ Add” to post one.' : ''}</div>`;
+    return;
+  }
+
+  listEl.innerHTML = rows.map(r => {
+    const removeBtn = canEdit
+      ? `<button class="ann-x" title="Remove date" onclick="removeImportantDate('${r.id}')">×</button>`
+      : '';
+    return `<div class="date-row"><span class="date">${r.d ? formatDateShort(r.d) : '—'}</span><span class="label">${escHtml(r.label)}</span>${removeBtn}</div>`;
+  }).join('');
+}
+
+function renderImportantDatesFallback(){
+  const listEl = document.getElementById('important-dates-list');
+  if (!listEl) return;
+  const setupNote = hasOpsCenterAccess()
+    ? `<div class="empty-state" style="text-align:left;padding:12px;border:0.5px dashed var(--card-border);border-radius:10px;margin-top:8px;">To manage dates from this screen, create a SharePoint list named “${escHtml(CONFIG.importantDatesListName)}” on the PSI site with one <strong style="color:var(--gray-700)">Date</strong> column (Date and time type, date only) named <strong style="color:var(--gray-700)">Date</strong>. The event label goes in Title. Found automatically on next sign-in.</div>`
+    : '';
+  listEl.innerHTML = IMPORTANT_DATES.map(d => `
+    <div class="date-row"><span class="date">${d.date}</span><span class="label">${d.label}</span></div>
+  `).join('') + setupNote;
+}
+
+function toggleDateForm(){
+  const form = document.getElementById('impd-form');
+  if (!form) return;
+  const show = form.style.display === 'none';
+  form.style.display = show ? 'block' : 'none';
+  if (show) document.getElementById('impd-date')?.focus();
+}
+
+async function submitImportantDate(){
+  const dateEl = document.getElementById('impd-date');
+  const labelEl = document.getElementById('impd-label');
+  const btn = document.getElementById('impd-post-btn');
+
+  const label = labelEl.value.trim();
+  if (!dateEl.value){ showToast('Pick a date first.', 'error'); return; }
+  if (!label){ showToast('Describe what the date is for.', 'error'); return; }
+
+  const listId = state.importantDatesListId || await resolveImportantDatesListId().catch(() => null);
+  if (!listId){
+    showToast(`List “${CONFIG.importantDatesListName}” not found in SharePoint yet.`, 'error');
+    return;
+  }
+  let cols = state.datesCols;
+  if (!cols){
+    try { cols = await resolveImportantDatesColumns(listId); }
+    catch(e){ cols = { date:null }; }
+  }
+  if (!cols.date){
+    showToast('The dates list has no Date column — add a Date column named “Date” in SharePoint.', 'error');
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Adding…'; showLoading(true);
+  try {
+    await graphPost(
+      `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${listId}/items`,
+      { fields: { Title: label, [cols.date]: dateEl.value } }
+    );
+    showToast('Date added ✓', 'success');
+    dateEl.value = ''; labelEl.value = '';
+    document.getElementById('impd-form').style.display = 'none';
+    await loadImportantDates();
+  } catch(e){
+    showToast('Failed to add: ' + e.message, 'error');
+  }
+  showLoading(false);
+  btn.disabled = false; btn.textContent = 'Add date';
+}
+
+async function removeImportantDate(itemId){
+  if (!confirm('Remove this date for everyone?')) return;
+  const listId = state.importantDatesListId || await resolveImportantDatesListId().catch(() => null);
+  if (!listId){ showToast('Important dates list not found.', 'error'); return; }
+  showLoading(true);
+  try {
+    await graphDelete(
+      `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${listId}/items/${itemId}`
+    );
+    showToast('Date removed ✓', 'success');
+    await loadImportantDates();
   } catch(e){
     showToast('Failed to remove: ' + e.message, 'error');
   }
@@ -1923,6 +2113,14 @@ async function loadDashboardData(){
   } catch(e){
     console.error('Announcements load failed:', e);
     renderAnnouncementsFallback();
+  }
+
+  // Important dates likewise
+  try {
+    await loadImportantDates();
+  } catch(e){
+    console.error('Important dates load failed:', e);
+    renderImportantDatesFallback();
   }
 
   // Recent documents loaded separately so one failure doesn't block the rest
