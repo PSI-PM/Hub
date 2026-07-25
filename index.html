@@ -332,6 +332,16 @@ button { cursor:pointer; font-family:inherit; }
 .announcement .title { font-size:14px; font-weight:600; color:var(--gray-900); margin-bottom:2px; }
 .announcement .desc { font-size:13px; color:var(--gray-400); line-height:1.5; margin-bottom:4px; }
 .announcement .meta { font-size:11px; color:var(--gray-500); }
+.ann-add-btn {
+  font-size:11px; font-weight:600; letter-spacing:0.04em; color:var(--blue);
+  background:var(--blue-light); border:0.5px solid rgba(0,160,255,0.3);
+  padding:4px 12px; border-radius:20px; cursor:pointer;
+  font-family:"Source Sans 3",sans-serif; transition:all 0.15s;
+}
+.ann-add-btn:hover { background:rgba(0,140,255,0.2); }
+.ann-form { background:rgba(0,40,120,0.08); border:0.5px dashed var(--card-border); border-radius:12px; padding:14px; margin-bottom:16px; }
+.ann-x { margin-left:auto; align-self:flex-start; background:none; border:none; color:var(--gray-500); font-size:16px; line-height:1; cursor:pointer; padding:3px 7px; border-radius:6px; flex-shrink:0; }
+.ann-x:hover { color:var(--red); background:var(--red-light); }
 
 /* ── QUICK LINKS ── */
 .quick-links-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
@@ -485,8 +495,28 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
     <!-- ANNOUNCEMENTS + QUICK LINKS -->
     <div class="row two-1-6-1">
       <div class="card">
-        <h2>Company announcements</h2>
-        <div id="announcements-list"></div>
+        <h2>Company announcements <button class="ann-add-btn" id="ann-add-toggle" style="display:none;" onclick="toggleAnnouncementForm()">+ Add</button></h2>
+        <div class="ann-form" id="ann-form" style="display:none;">
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="ann-icon">Icon (emoji, optional)</label>
+              <input type="text" id="ann-icon" placeholder="📣" maxlength="4">
+            </div>
+            <div class="form-field">
+              <label for="ann-title">Title</label>
+              <input type="text" id="ann-title" placeholder="e.g. Office closed July 4th">
+            </div>
+            <div class="form-field full">
+              <label for="ann-desc">Details (optional)</label>
+              <input type="text" id="ann-desc" placeholder="Short description staff will see">
+            </div>
+          </div>
+          <button class="btn-submit-form" id="ann-post-btn" onclick="submitAnnouncement()">Post announcement</button>
+        </div>
+        <div id="announcements-list">
+          <div class="skeleton-line" style="width:100%"></div>
+          <div class="skeleton-line" style="width:80%"></div>
+        </div>
       </div>
       <div class="card">
         <h2>Quick links</h2>
@@ -787,6 +817,7 @@ const CONFIG = {
   invoiceContactsListId: 'bcb61252-2eb7-4d95-a7af-808462796527',
   rosterDropZoneOwner: 'scottj@psipm.com',
   rosterDropZonePath: 'Roster Drop Zone',
+  announcementsListName: 'Hub Announcements',
 };
 
 const SCOPES = ['Sites.ReadWrite.All','User.Read'];
@@ -809,6 +840,8 @@ function hasOpsCenterAccess(){
    have a live SharePoint source yet (same pattern as the
    Instructor Hub's APPS array).
    ============================================================ */
+// Fallback only — shown if the 'Hub Announcements' SharePoint list doesn't
+// exist yet. Once that list is created, announcements are managed on-screen.
 const ANNOUNCEMENTS = [
   {
     icon: "🎓",
@@ -926,7 +959,7 @@ const msalApp = new msal.PublicClientApplication({
   cache: { cacheLocation: 'sessionStorage' },
 });
 
-let state = { user: null, courses: [], students: [], availability: [] };
+let state = { user: null, courses: [], students: [], availability: [], announcements: [], announcementsListId: null };
 
 // ── UTILS ───────────────────────────────────────
 function showScreen(id){
@@ -1000,7 +1033,7 @@ async function getToken(){
   }
 }
 function handleLogout(){
-  state = { user:null, courses:[], students:[], availability:[] };
+  state = { user:null, courses:[], students:[], availability:[], announcements:[], announcementsListId:null };
   msalApp.logoutRedirect({ postLogoutRedirectUri: window.location.href });
 }
 
@@ -1040,6 +1073,15 @@ async function graphPost(path, body){
   return res.json();
 }
 
+async function graphDelete(path){
+  const token = await getToken();
+  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+    method:'DELETE',
+    headers:{ Authorization:`Bearer ${token}` },
+  });
+  if(!res.ok) throw new Error(await res.text());
+}
+
 // ── ENTER APP ────────────────────────────────────
 function enterApp(){
   showLoading(false);
@@ -1057,23 +1099,18 @@ function enterApp(){
     opsTabBtn.style.display = hasOpsCenterAccess() ? '' : 'none';
   }
 
+  // The announcement compose button follows the same allowlist as the Ops tab.
+  // (UI-only gating — SharePoint list permissions are the real authority.)
+  const annBtn = document.getElementById('ann-add-toggle');
+  if (annBtn) annBtn.style.display = hasOpsCenterAccess() ? '' : 'none';
+
   renderStaticSections();
   loadDashboardData();
 }
 
 // ── STATIC SECTIONS ─────────────────────────────
 function renderStaticSections(){
-  // Announcements
-  const annList = document.getElementById('announcements-list');
-  annList.innerHTML = ANNOUNCEMENTS.map(a => `
-    <div class="announcement">
-      <div class="icon">${a.icon}</div>
-      <div>
-        <div class="title">${a.title}</div>
-        <div class="desc">${a.desc}</div>
-        <div class="meta">${a.meta}</div>
-      </div>
-    </div>`).join('');
+  // Announcements are loaded live from SharePoint in loadAnnouncements()
 
   // Quick links
   const qlGrid = document.getElementById('quick-links-grid');
@@ -1132,6 +1169,147 @@ function renderStaticSections(){
         <p><span class="name">${c.name}</span> — ${c.role}<br><a href="mailto:${c.email}" style="color:var(--gray-500);font-size:11.5px;">${c.email}</a></p>
       </div>`).join('');
   }
+}
+
+// ── ANNOUNCEMENTS (live, editable from the Home tab) ───────────────
+// Backed by a SharePoint list found BY NAME (CONFIG.announcementsListName), so
+// no GUID setup is needed: create a list called 'Hub Announcements' with text
+// columns 'Description' and 'Icon', and this card becomes editable on-screen.
+// Until that list exists, the hardcoded ANNOUNCEMENTS array renders as a
+// read-only fallback.
+async function resolveAnnouncementsListId(){
+  if (state.announcementsListId) return state.announcementsListId;
+  const lists = await graphGetAll(`/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists?$select=id,displayName`);
+  const want = CONFIG.announcementsListName.trim().toLowerCase();
+  const hit = (lists || []).find(l => (l.displayName || '').trim().toLowerCase() === want);
+  if (!hit) return null;
+  state.announcementsListId = hit.id;
+  return hit.id;
+}
+
+async function loadAnnouncements(){
+  const listEl = document.getElementById('announcements-list');
+  if (!listEl) return;
+  try {
+    const listId = await resolveAnnouncementsListId();
+    if (!listId){ renderAnnouncementsFallback(); return; }
+    const items = await graphGetAll(
+      `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${listId}/items?expand=fields`
+    );
+    state.announcements = (items || []).sort(
+      (a,b) => new Date(b.createdDateTime || 0) - new Date(a.createdDateTime || 0)
+    );
+    renderAnnouncements();
+  } catch(e){
+    console.error('Announcements load failed:', e);
+    renderAnnouncementsFallback();
+  }
+}
+
+function renderAnnouncements(){
+  const listEl = document.getElementById('announcements-list');
+  if (!listEl) return;
+  const canEdit = hasOpsCenterAccess();
+
+  if (!state.announcements.length){
+    listEl.innerHTML = `<div class="empty-state">No announcements right now.${canEdit ? ' Use “+ Add” to post one.' : ''}</div>`;
+    return;
+  }
+
+  listEl.innerHTML = state.announcements.map(item => {
+    const f = item.fields || {};
+    const icon = cellText(f.Icon) || '📣';
+    const title = escHtml(cellText(f.Title) || '(untitled)');
+    const desc = escHtml(cellText(f.Description) || '');
+    const posted = item.createdDateTime ? 'Posted ' + formatDateShort(new Date(item.createdDateTime)) : '';
+    const removeBtn = canEdit
+      ? `<button class="ann-x" title="Remove announcement" onclick="removeAnnouncement('${item.id}')">×</button>`
+      : '';
+    return `
+      <div class="announcement">
+        <div class="icon">${escHtml(icon)}</div>
+        <div>
+          <div class="title">${title}</div>
+          ${desc ? `<div class="desc">${desc}</div>` : ''}
+          <div class="meta">${posted}</div>
+        </div>
+        ${removeBtn}
+      </div>`;
+  }).join('');
+}
+
+function renderAnnouncementsFallback(){
+  const listEl = document.getElementById('announcements-list');
+  if (!listEl) return;
+  const setupNote = hasOpsCenterAccess()
+    ? `<div class="empty-state" style="text-align:left;padding:12px;border:0.5px dashed var(--card-border);border-radius:10px;margin-top:8px;">To manage announcements from this screen, create a SharePoint list named “${escHtml(CONFIG.announcementsListName)}” on the PSI site with two text columns: <strong style="color:var(--gray-700)">Description</strong> and <strong style="color:var(--gray-700)">Icon</strong>. This card will find it automatically on the next sign-in.</div>`
+    : '';
+  listEl.innerHTML = ANNOUNCEMENTS.map(a => `
+    <div class="announcement">
+      <div class="icon">${a.icon}</div>
+      <div>
+        <div class="title">${a.title}</div>
+        <div class="desc">${a.desc}</div>
+        <div class="meta">${a.meta}</div>
+      </div>
+    </div>`).join('') + setupNote;
+}
+
+function toggleAnnouncementForm(){
+  const form = document.getElementById('ann-form');
+  if (!form) return;
+  const show = form.style.display === 'none';
+  form.style.display = show ? 'block' : 'none';
+  if (show) document.getElementById('ann-title')?.focus();
+}
+
+async function submitAnnouncement(){
+  const iconEl = document.getElementById('ann-icon');
+  const titleEl = document.getElementById('ann-title');
+  const descEl = document.getElementById('ann-desc');
+  const btn = document.getElementById('ann-post-btn');
+
+  const title = titleEl.value.trim();
+  if (!title){ showToast('An announcement needs a title.', 'error'); return; }
+
+  const listId = state.announcementsListId || await resolveAnnouncementsListId().catch(() => null);
+  if (!listId){
+    showToast(`List “${CONFIG.announcementsListName}” not found in SharePoint yet.`, 'error');
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Posting…'; showLoading(true);
+  try {
+    await graphPost(
+      `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${listId}/items`,
+      { fields: { Title: title, Description: descEl.value.trim(), Icon: iconEl.value.trim() } }
+    );
+    showToast('Announcement posted ✓', 'success');
+    iconEl.value = ''; titleEl.value = ''; descEl.value = '';
+    document.getElementById('ann-form').style.display = 'none';
+    await loadAnnouncements();
+  } catch(e){
+    showToast('Failed to post: ' + e.message, 'error');
+  }
+  showLoading(false);
+  btn.disabled = false; btn.textContent = 'Post announcement';
+}
+
+async function removeAnnouncement(itemId){
+  if (!confirm('Remove this announcement for everyone?')) return;
+  const listId = state.announcementsListId || await resolveAnnouncementsListId().catch(() => null);
+  if (!listId){ showToast('Announcements list not found.', 'error'); return; }
+  showLoading(true);
+  try {
+    await graphDelete(
+      `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${listId}/items/${itemId}`
+    );
+    showToast('Announcement removed ✓', 'success');
+    await loadAnnouncements();
+  } catch(e){
+    showToast('Failed to remove: ' + e.message, 'error');
+  }
+  showLoading(false);
 }
 
 // ── TAB SWITCHING ────────────────────────────────
@@ -1646,6 +1824,14 @@ async function loadDashboardData(){
       `<div class="error-state">Couldn't load classes: ${e.message}</div>`;
     document.getElementById('instructor-assignments-list').innerHTML =
       `<div class="error-state">Couldn't load assignments.</div>`;
+  }
+
+  // Announcements load separately so a missing list doesn't block the rest
+  try {
+    await loadAnnouncements();
+  } catch(e){
+    console.error('Announcements load failed:', e);
+    renderAnnouncementsFallback();
   }
 
   // Recent documents loaded separately so one failure doesn't block the rest
