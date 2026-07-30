@@ -251,6 +251,27 @@ button { cursor:pointer; font-family:inherit; }
 .srch-note { font-size:11.5px; color:var(--gray-500); margin-top:10px; line-height:1.5; }
 @media (max-width:640px) { .srch-meta-grid { grid-template-columns:1fr; } }
 
+/* ── STUDENT EDITOR (opened from a lookup card name) ── */
+.srch-name.editable { cursor:pointer; }
+.srch-name.editable:hover { text-decoration:underline; text-decoration-color:var(--gray-500); }
+.srch-name .editpen { font-size:11px; color:var(--gray-500); margin-left:3px; vertical-align:1px; }
+.stu-edit { border-top:0.5px solid rgba(0,140,255,0.15); margin-top:12px; padding-top:14px; }
+.stu-edit-head { font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--gray-500); margin-bottom:10px; }
+.stu-edit-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; }
+.stu-field { display:flex; flex-direction:column; gap:5px; }
+.stu-field.full { grid-column:1 / -1; }
+.stu-field label { font-size:10px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; color:var(--gray-500); }
+.stu-field input, .stu-field select { padding:9px 11px; border-radius:8px; border:1.5px solid var(--card-border); background:rgba(0,40,120,0.1); color:var(--gray-900); font-size:13px; outline:none; font-family:inherit; transition:border-color 0.15s; }
+.stu-field input:focus, .stu-field select:focus { border-color:rgba(0,180,255,0.5); }
+.stu-adv-label { grid-column:1 / -1; font-size:10.5px; color:var(--yellow); background:var(--yellow-light); border:0.5px solid rgba(220,150,30,0.3); border-radius:7px; padding:7px 11px; margin-top:4px; line-height:1.5; }
+.stu-adv-label b { color:var(--gray-900); }
+.stu-edit-actions { display:flex; gap:9px; align-items:center; margin-top:14px; }
+.stu-save { padding:9px 20px; border-radius:8px; border:none; background:linear-gradient(90deg,#0050d0,#0090e8); color:white; font-size:13px; font-weight:600; box-shadow:0 4px 14px rgba(0,120,220,0.3); font-family:inherit; }
+.stu-save:hover { opacity:0.9; } .stu-save:disabled { opacity:0.5; cursor:not-allowed; }
+.stu-cancel { padding:9px 16px; border-radius:8px; border:0.5px solid var(--card-border); background:transparent; color:var(--gray-500); font-size:13px; font-weight:600; font-family:inherit; }
+.stu-cancel:hover { color:var(--gray-900); }
+@media (max-width:640px) { .stu-edit-grid { grid-template-columns:1fr; } }
+
 /* ── CLASS INVOICING ROWS ── */
 .invc-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:13px 16px; background:rgba(0,60,180,0.08); border:0.5px solid var(--card-border); border-radius:12px; margin-bottom:10px; }
 .invc-info .invc-title { font-family:"Playfair Display",serif; font-size:15px; color:var(--gray-900); }
@@ -532,7 +553,7 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
         <table class="data-table" id="classes-table" style="display:none;">
           <thead>
             <tr>
-              <th>Course</th><th>Client</th><th>Start</th><th>End</th>
+              <th>Course #</th><th>Course</th><th>Client</th><th>Start</th><th>End</th>
               <th>Instructor</th><th>Students</th><th>Status</th>
             </tr>
           </thead>
@@ -617,6 +638,14 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
         </div>
       </div>
 
+      <!-- STUDENT & CLASS LOOKUP -->
+      <div class="card" style="margin-bottom:18px;">
+        <h2>Student &amp; class lookup</h2>
+        <p style="font-size:12.5px;color:var(--gray-500);margin-bottom:14px;">Search a student by name or email, or a class by its course number (e.g. E26-Mid-F7) — including legacy classes that only exist on student records. Click a student's name to edit their record. Classes open the full roster.</p>
+        <input type="text" class="srch-input" id="ic-search" placeholder="Search students or course numbers…" oninput="renderOpsSearch()" autocomplete="off">
+        <div id="ic-search-results" class="srch-results"></div>
+      </div>
+
       <!-- TEACHING RESOURCES -->
       <div class="card" style="margin-bottom:18px;">
         <h2>Teaching resources</h2>
@@ -680,7 +709,7 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
         <h2>Student &amp; class lookup</h2>
         <p style="font-size:12.5px;color:var(--gray-500);margin-bottom:14px;">Search a student by name or email, or a class by its course number (e.g. E26-Mid-F7) — including legacy classes that only exist on student records. Students return a detail card with links to their training records; classes open the full roster.</p>
         <input type="text" class="srch-input" id="ops-search" placeholder="Search students or course numbers…" oninput="renderOpsSearch()" autocomplete="off">
-        <div id="ops-search-results"></div>
+        <div id="ops-search-results" class="srch-results"></div>
       </div>
 
       <div class="section-label-sm">Enrollment</div>
@@ -1168,6 +1197,17 @@ async function graphDelete(path){
   if(!res.ok) throw new Error(await res.text());
 }
 
+async function graphPatch(path, fields){
+  const token = await getToken();
+  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+    method:'PATCH',
+    headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json' },
+    body: JSON.stringify(fields),
+  });
+  if(!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 // ── ENTER APP ────────────────────────────────────
 function enterApp(){
   showLoading(false);
@@ -1644,6 +1684,7 @@ function switchTab(tabName){
   if (tabName === 'instructor-center') {
     renderMyUpcomingClasses();
     loadMyAvailability();
+    initOpsSearch();
   }
   if (tabName === 'operations-center') {
     initRosterDropZone();
@@ -2648,10 +2689,30 @@ async function initOpsSearch(){
   renderOpsSearch();
 }
 
+// The lookup lives in both the Operations Center and the Instructor Center.
+// Resolve whichever copy is in the currently-active tab so one render function
+// serves both, and clear the inactive copy so student-card element IDs are
+// never duplicated across the two.
+function activeSearchEls(){
+  const tabs = ['tab-operations-center','tab-instructor-center'];
+  for (const id of tabs){
+    const tab = document.getElementById(id);
+    if (tab && tab.classList.contains('active')){
+      const input = tab.querySelector('.srch-input');
+      const results = tab.querySelector('.srch-results');
+      if (input && results) return { input, results };
+    }
+  }
+  return null;
+}
+
 async function renderOpsSearch(){
-  const box = document.getElementById('ops-search-results');
-  const inputEl = document.getElementById('ops-search');
-  if (!box || !inputEl) return;
+  const ctx = activeSearchEls();
+  if (!ctx) return;
+  const box = ctx.results;
+  const inputEl = ctx.input;
+  // Only the active tab's lookup holds rendered results at any time.
+  document.querySelectorAll('.srch-results').forEach(r => { if (r !== box) r.innerHTML = ''; });
 
   const q = (inputEl.value || '').trim().toLowerCase();
   if (!q){ box.innerHTML = ''; _opsSearchClasses = []; return; }
@@ -2773,9 +2834,9 @@ function renderStudentCard(s, map){
     : '';
 
   return `
-    <div class="srch-card">
+    <div class="srch-card" id="stu-card-${s.id}">
       <div class="srch-stu-head">
-        <div class="srch-name">${escHtml(name)}${status ? ` <span class="pill ${studentStatusPillClass(status)}">${escHtml(status)}</span>` : ''}</div>
+        <div class="srch-name editable" onclick="openStudentEditor('${s.id}')" title="Click to edit this student">${escHtml(name)}<span class="editpen">&#9998;</span>${status ? ` <span class="pill ${studentStatusPillClass(status)}">${escHtml(status)}</span>` : ''}</div>
         <div class="srch-meta-grid">
           ${cell('Email', email ? `<a href="mailto:${escHtml(email)}">${escHtml(email)}</a>` : '')}
           ${cell('Phone', phone ? `<a href="tel:${escHtml(phone.replace(/[^\d+]/g,''))}">${escHtml(phone)}</a>` : '')}
@@ -2784,8 +2845,124 @@ function renderStudentCard(s, map){
         </div>
         ${buttons.length ? `<div class="srch-actions">${buttons.join('')}</div>` : ''}
         ${note}
+        <div class="stu-edit" id="stu-edit-${s.id}" style="display:none;"></div>
       </div>
     </div>`;
+}
+
+// ── STUDENT EDITOR ─────────────────────────────────────────────────
+// Clicking a lookup card's name opens an inline editor over the live
+// SharePoint Students list. Editable fields are the list's real user columns,
+// auto-detected from /columns (system fields like Created/Modified/Author are
+// never shown, since SharePoint rejects writes to them). Save PATCHes only the
+// fields that actually changed. Requires the signed-in user to have write
+// access to the Students list — a read-only account gets an accessDenied that
+// the editor reports plainly.
+
+const STU_SYSTEM_COLS = new Set(['id','ID','ContentType','Created','Modified','Author','Editor',
+  '_UIVersionString','Attachments','Edit','LinkTitleNoMenu','LinkTitle','DocIcon','ItemChildCount',
+  'FolderChildCount','_ComplianceFlags','_ComplianceTag','AppAuthor','AppEditor','_CommentCount',
+  '_LikeCount','ContentTypeId','ParentUniqueId','CheckoutUser','_CheckinComment','ComplianceAssetId']);
+const STU_ADVANCED_COLS = new Set(['CourseLookupId','CourseId','Course','LegacyCourseCode']);
+
+async function getStudentColumns(){
+  if (getStudentColumns._cols) return getStudentColumns._cols;
+  const cols = await graphGet(`/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.studentsListId}/columns`);
+  getStudentColumns._cols = (cols.value || []).filter(c =>
+    !c.readOnly && !c.hidden && !STU_SYSTEM_COLS.has(c.name) && c.name && !c.name.startsWith('_'));
+  return getStudentColumns._cols;
+}
+
+async function openStudentEditor(studentId){
+  const panel = document.getElementById(`stu-edit-${studentId}`);
+  if (!panel) return;
+  if (panel.style.display !== 'none'){ panel.style.display = 'none'; panel.innerHTML = ''; return; }
+
+  const student = state.students.find(s => s.id === studentId);
+  if (!student){ showToast('Student not found — try searching again.', 'error'); return; }
+
+  panel.style.display = 'block';
+  panel.innerHTML = `<div class="loading-state" style="padding:12px">Loading editable fields…</div>`;
+
+  let cols;
+  try { cols = await getStudentColumns(); }
+  catch(e){ panel.innerHTML = `<div class="error-state" style="padding:12px">Couldn't load the list's columns: ${escHtml(e.message)}</div>`; return; }
+
+  const f = student.fields || {};
+  const isChoice = c => c.choice && Array.isArray(c.choice.choices);
+  const val = name => { const v = f[name]; return (typeof v === 'object' && v) ? (v.Value ?? '') : (v ?? ''); };
+
+  const fieldHtml = (c) => {
+    const cur = val(c.name);
+    const id = `stuf-${studentId}-${c.name}`;
+    let control;
+    if (isChoice(c)){
+      const opts = ['<option value=""></option>'].concat(
+        c.choice.choices.map(ch => `<option value="${escHtml(ch)}"${String(ch)===String(cur)?' selected':''}>${escHtml(ch)}</option>`));
+      control = `<select id="${id}" data-col="${escHtml(c.name)}">${opts.join('')}</select>`;
+    } else {
+      let v = cur;
+      const type = c.dateTime ? 'date' : 'text';
+      if (c.dateTime && cur){ const d = new Date(cur); if (!isNaN(d)) v = d.toISOString().slice(0,10); }
+      control = `<input id="${id}" data-col="${escHtml(c.name)}" type="${type}" value="${escHtml(v)}">`;
+    }
+    const wide = (!isChoice(c) && String(cur).length > 24) ? ' full' : '';
+    return `<div class="stu-field${wide}"><label for="${id}">${escHtml(c.displayName || c.name)}</label>${control}</div>`;
+  };
+
+  const basic = cols.filter(c => !STU_ADVANCED_COLS.has(c.name));
+  const adv = cols.filter(c => STU_ADVANCED_COLS.has(c.name));
+
+  panel.innerHTML = `
+    <div class="stu-edit-head">Edit student &mdash; writes to the SharePoint Students list</div>
+    <div class="stu-edit-grid">
+      ${basic.map(fieldHtml).join('')}
+      ${adv.length ? `<div class="stu-adv-label"><b>Advanced &mdash; affects class links.</b> These decide which class the student belongs to; change them only if you mean to move the student between classes.</div>` : ''}
+      ${adv.map(fieldHtml).join('')}
+    </div>
+    <div class="stu-edit-actions">
+      <button class="stu-save" onclick="saveStudentEdits('${studentId}', this)">Save changes</button>
+      <button class="stu-cancel" onclick="openStudentEditor('${studentId}')">Cancel</button>
+    </div>`;
+}
+
+async function saveStudentEdits(studentId, btn){
+  const student = state.students.find(s => s.id === studentId);
+  const panel = document.getElementById(`stu-edit-${studentId}`);
+  if (!student || !panel) return;
+  const f = student.fields || {};
+  const curVal = name => { const v = f[name]; return (typeof v === 'object' && v) ? (v.Value ?? '') : (v ?? ''); };
+
+  const changed = {};
+  panel.querySelectorAll('[data-col]').forEach(el => {
+    const col = el.dataset.col;
+    let now = el.value.trim();
+    let before = String(curVal(col) ?? '').trim();
+    if (el.type === 'date' && before){ const d = new Date(before); if (!isNaN(d)) before = d.toISOString().slice(0,10); }
+    if (now !== before) changed[col] = (el.type === 'date') ? (now || null) : now;
+  });
+
+  if (!Object.keys(changed).length){ showToast('No changes to save.', 'error'); return; }
+  if (!confirm(`Save ${Object.keys(changed).length} change(s) to ${f.Title || 'this student'}? This updates the SharePoint Students list for everyone.`)) return;
+
+  btn.disabled = true; btn.textContent = 'Saving…'; showLoading(true);
+  try {
+    await graphPatch(
+      `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.studentsListId}/items/${student.fields.id}/fields`,
+      changed
+    );
+    Object.assign(student.fields, changed);
+    showToast('Student updated ✓', 'success');
+    panel.style.display = 'none'; panel.innerHTML = '';
+    renderOpsSearch();
+  } catch(e){
+    const msg = /accessDenied|Access denied/i.test(e.message)
+      ? 'Access denied — your account needs write permission to the SharePoint Students list. Ask an admin to grant it.'
+      : 'Save failed: ' + e.message;
+    showToast(msg, 'error');
+    btn.disabled = false; btn.textContent = 'Save changes';
+  }
+  showLoading(false);
 }
 
 function renderClassResult(r, idx){
@@ -3019,6 +3196,7 @@ function renderUpcomingClasses(){
   tbody.innerHTML = upcoming.map(c => {
     const f = c.fields;
     const courseType = fieldVal(f, 'CourseType') || f.Title || '';
+    const courseNum = f.Title || '—';
     const partner = fieldVal(f, 'Partner');
     const instructor = fieldVal(f, 'Instructor');
     const status = fieldVal(f, 'Status');
@@ -3027,7 +3205,8 @@ function renderUpcomingClasses(){
     const count = activeStudentCountForCourse(c);
     return `
       <tr>
-        <td class="course">${courseType}</td>
+        <td class="course">${courseNum}</td>
+        <td>${courseType}</td>
         <td>${partner || '—'}</td>
         <td>${start}</td>
         <td>${end}</td>
