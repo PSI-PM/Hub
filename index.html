@@ -3095,6 +3095,34 @@ async function renderClassRosterBody(idx){
 // fresh at click time (not the copy loaded at sign-in), includes everyone —
 // withdrawn students appear with their status rather than being dropped —
 // and enriches each row with class and client the same way the lookup does.
+// Find the internal field name that holds a course's type/program, without
+// assuming it's literally "CourseType". Tries known display/internal variants
+// against loaded courses, then sniffs for a field whose value is a program code.
+let _courseTypeKey;
+function resolveCourseTypeKey(){
+  if (_courseTypeKey !== undefined) return _courseTypeKey;
+  // CourseType can live on the student record (Students list) and/or the course.
+  const sample = []
+    .concat((state.students || []).map(s => s.fields))
+    .concat((state.courses || []).map(c => c.fields))
+    .filter(Boolean);
+  if (!sample.length){ _courseTypeKey = null; return null; }
+  const candidates = ['CourseType','Course_x0020_Type','CourseType0','Course Type',
+    'Program','ProgramType','Type','Course_Type','Program_x0020_Type'];
+  for (const key of candidates){
+    if (sample.some(fl => String(fl[key] ?? '').trim() !== '')){ _courseTypeKey = key; return key; }
+  }
+  const looksLikeType = v => /^(pmp|capm|practical pm|practical|cpmai|ppm|pm prep|pm prep study group)$/i.test(String(v ?? '').trim());
+  const keys = new Set();
+  sample.forEach(fl => Object.keys(fl).forEach(k => keys.add(k)));
+  for (const k of keys){
+    if (['Title','Partner','Instructor','Status'].includes(k)) continue;
+    if (sample.some(fl => looksLikeType(fl[k]))){ _courseTypeKey = k; return k; }
+  }
+  _courseTypeKey = null;
+  return null;
+}
+
 async function downloadMasterStudentList(btn){
   const originalLabel = btn ? btn.textContent : '';
   if (btn){ btn.disabled = true; btn.textContent = 'Building…'; }
@@ -3109,6 +3137,12 @@ async function downloadMasterStudentList(btn){
       return;
     }
     const map = await ensureStudentFieldMap(students);
+
+    // Resolve the course-type field name from the actual Courses data, so a
+    // column stored as CourseType / Course_x0020_Type / "Course Type" / Program
+    // / Type all work. Falls back to scanning a sample course's fields for a
+    // value that looks like a program code.
+    const courseTypeKey = resolveCourseTypeKey();
 
     const rows = students.map(s => {
       const f = s.fields || {};
@@ -3135,12 +3169,21 @@ async function downloadMasterStudentList(btn){
         (map.end ? parseDateOnly(cellText(f[map.end])) : null) ||
         (cf && cf.EndDate ? parseDateOnly(cf.EndDate) : null);
 
+      // Course type: the CourseType column lives on the STUDENT record (Students
+      // list), so read it there first; fall back to a linked course's resolved
+      // field only if the student record has none.
+      const courseType =
+        cellText(f.CourseType) ||
+        (courseTypeKey ? cellText(f[courseTypeKey]) : '') ||
+        (cf && courseTypeKey ? cellText(cf[courseTypeKey]) : '') || '';
+
       return {
         name: cellText(f.Title) || '',
         email: map.email ? cellText(f[map.email]) : '',
         phone: map.phone ? cellText(f[map.phone]) : '',
         status: map.status ? cellText(f[map.status]) : '',
         klass: codes.join(', '),
+        courseType,
         client: myCourses.length ? (fieldVal(myCourses[0].fields, 'Partner') || '') : '',
         startD, endD,
       };
@@ -3175,13 +3218,17 @@ async function downloadMasterStudentList(btn){
     }
 
     const aoa = [
-      ['Name','Email','Phone','Status','Class','Client','Start Date','End Date'],
-      ...exportRows.map(r => [r.name, r.email, r.phone, r.status, r.klass, r.client, r.startD || '', r.endD || '']),
+      ['Name','Email','Phone','Status','Class','Course Type','Client','Start Date','End Date'],
+      ...exportRows.map(r => [r.name, r.email, r.phone, r.status, r.klass, r.courseType, r.client, r.startD || '', r.endD || '']),
     ];
+    // TEMP DIAGNOSTIC — remove once Course Type is confirmed populating.
+    const withType = exportRows.filter(r => r.courseType).length;
+    console.log(`[MasterList] course-type field resolved as: ${_courseTypeKey || '(none found)'} | ${withType}/${exportRows.length} rows have a Course Type`);
+    showToast(`Course Type source: ${_courseTypeKey || 'NOT FOUND'} · filled ${withType}/${exportRows.length} rows`, withType ? 'success' : 'error');
     // cellDates makes Start/End real Excel dates, so Excel's date filter
     // (year/month grouping) works instead of treating them as text.
     const ws = XLSX.utils.aoa_to_sheet(aoa, { cellDates: true });
-    ws['!cols'] = [{wch:28},{wch:32},{wch:16},{wch:12},{wch:24},{wch:24},{wch:12},{wch:12}];
+    ws['!cols'] = [{wch:28},{wch:32},{wch:16},{wch:12},{wch:24},{wch:16},{wch:24},{wch:12},{wch:12}];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Students');
     const n = new Date();
