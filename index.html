@@ -3221,10 +3221,6 @@ async function downloadMasterStudentList(btn){
       ['Name','Email','Phone','Status','Class','Course Type','Client','Start Date','End Date'],
       ...exportRows.map(r => [r.name, r.email, r.phone, r.status, r.klass, r.courseType, r.client, r.startD || '', r.endD || '']),
     ];
-    // TEMP DIAGNOSTIC — remove once Course Type is confirmed populating.
-    const withType = exportRows.filter(r => r.courseType).length;
-    console.log(`[MasterList] course-type field resolved as: ${_courseTypeKey || '(none found)'} | ${withType}/${exportRows.length} rows have a Course Type`);
-    showToast(`Course Type source: ${_courseTypeKey || 'NOT FOUND'} · filled ${withType}/${exportRows.length} rows`, withType ? 'success' : 'error');
     // cellDates makes Start/End real Excel dates, so Excel's date filter
     // (year/month grouping) works instead of treating them as text.
     const ws = XLSX.utils.aoa_to_sheet(aoa, { cellDates: true });
