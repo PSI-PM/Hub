@@ -251,10 +251,7 @@ button { cursor:pointer; font-family:inherit; }
 .srch-note { font-size:11.5px; color:var(--gray-500); margin-top:10px; line-height:1.5; }
 @media (max-width:640px) { .srch-meta-grid { grid-template-columns:1fr; } }
 
-/* ── STUDENT EDITOR (opened from a lookup card name) ── */
-.srch-name.editable { cursor:pointer; }
-.srch-name.editable:hover { text-decoration:underline; text-decoration-color:var(--gray-500); }
-.srch-name .editpen { font-size:11px; color:var(--gray-500); margin-left:3px; vertical-align:1px; }
+/* ── STUDENT EDITOR (opened from a lookup card or roster row) ── */
 .stu-edit { border-top:0.5px solid rgba(0,140,255,0.15); margin-top:12px; padding-top:14px; }
 .stu-edit-head { font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--gray-500); margin-bottom:10px; }
 .stu-edit-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; }
@@ -263,6 +260,15 @@ button { cursor:pointer; font-family:inherit; }
 .stu-field label { font-size:10px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; color:var(--gray-500); }
 .stu-field input, .stu-field select { padding:9px 11px; border-radius:8px; border:1.5px solid var(--card-border); background:rgba(0,40,120,0.1); color:var(--gray-900); font-size:13px; outline:none; font-family:inherit; transition:border-color 0.15s; }
 .stu-field input:focus, .stu-field select:focus { border-color:rgba(0,180,255,0.5); }
+/* Dropdown list items render in the OS palette, so force dark bg + light text
+   or choices show white-on-white on some systems. */
+.stu-field select option { background:#0a1f3c; color:#e0f0ff; }
+/* Edit-information button (replaces the hard-to-see pencil) */
+.srch-btn.edit { cursor:pointer; border:0.5px solid rgba(0,180,255,0.4); background:rgba(0,140,255,0.14); color:var(--gray-700); font-family:inherit; }
+.srch-btn.edit:hover { background:rgba(0,140,255,0.24); color:var(--gray-900); }
+.srch-btn.edit.sm { padding:5px 11px; font-size:11.5px; }
+.stu-edit-tr:hover { background:transparent !important; }
+.stu-edit-tr td { border:none !important; }
 .stu-adv-label { grid-column:1 / -1; font-size:10.5px; color:var(--yellow); background:var(--yellow-light); border:0.5px solid rgba(220,150,30,0.3); border-radius:7px; padding:7px 11px; margin-top:4px; line-height:1.5; }
 .stu-adv-label b { color:var(--gray-900); }
 .stu-edit-actions { display:flex; gap:9px; align-items:center; margin-top:14px; }
@@ -2828,6 +2834,7 @@ function renderStudentCard(s, map){
     return `<a class="srch-btn" href="${url}" target="_blank" rel="noopener">${label} ↗</a>`;
   }).filter(Boolean);
   if (email) buttons.push(`<a class="srch-btn alt" href="mailto:${escHtml(email)}">Email student</a>`);
+  buttons.push(`<button class="srch-btn edit" onclick="openStudentEditor('${s.id}')">✎ Edit information</button>`);
 
   const note = !classCodes.length
     ? `<div class="srch-note">No class on this student's record, so training records can't be linked automatically.</div>`
@@ -2836,7 +2843,7 @@ function renderStudentCard(s, map){
   return `
     <div class="srch-card" id="stu-card-${s.id}">
       <div class="srch-stu-head">
-        <div class="srch-name editable" onclick="openStudentEditor('${s.id}')" title="Click to edit this student">${escHtml(name)}<span class="editpen">&#9998;</span>${status ? ` <span class="pill ${studentStatusPillClass(status)}">${escHtml(status)}</span>` : ''}</div>
+        <div class="srch-name">${escHtml(name)}${status ? ` <span class="pill ${studentStatusPillClass(status)}">${escHtml(status)}</span>` : ''}</div>
         <div class="srch-meta-grid">
           ${cell('Email', email ? `<a href="mailto:${escHtml(email)}">${escHtml(email)}</a>` : '')}
           ${cell('Phone', phone ? `<a href="tel:${escHtml(phone.replace(/[^\d+]/g,''))}">${escHtml(phone)}</a>` : '')}
@@ -2873,8 +2880,9 @@ async function getStudentColumns(){
   return getStudentColumns._cols;
 }
 
-async function openStudentEditor(studentId){
-  const panel = document.getElementById(`stu-edit-${studentId}`);
+async function openStudentEditor(studentId, key){
+  key = key || studentId;
+  const panel = document.getElementById(`stu-edit-${key}`);
   if (!panel) return;
   if (panel.style.display !== 'none'){ panel.style.display = 'none'; panel.innerHTML = ''; return; }
 
@@ -2894,10 +2902,10 @@ async function openStudentEditor(studentId){
 
   const fieldHtml = (c) => {
     const cur = val(c.name);
-    const id = `stuf-${studentId}-${c.name}`;
+    const id = `stuf-${key}-${c.name}`;
     let control;
     if (isChoice(c)){
-      const opts = ['<option value=""></option>'].concat(
+      const opts = ['<option value="">—</option>'].concat(
         c.choice.choices.map(ch => `<option value="${escHtml(ch)}"${String(ch)===String(cur)?' selected':''}>${escHtml(ch)}</option>`));
       control = `<select id="${id}" data-col="${escHtml(c.name)}">${opts.join('')}</select>`;
     } else {
@@ -2921,14 +2929,15 @@ async function openStudentEditor(studentId){
       ${adv.map(fieldHtml).join('')}
     </div>
     <div class="stu-edit-actions">
-      <button class="stu-save" onclick="saveStudentEdits('${studentId}', this)">Save changes</button>
-      <button class="stu-cancel" onclick="openStudentEditor('${studentId}')">Cancel</button>
+      <button class="stu-save" onclick="saveStudentEdits('${studentId}', this, '${key}')">Save changes</button>
+      <button class="stu-cancel" onclick="openStudentEditor('${studentId}','${key}')">Cancel</button>
     </div>`;
 }
 
-async function saveStudentEdits(studentId, btn){
+async function saveStudentEdits(studentId, btn, key){
+  key = key || studentId;
   const student = state.students.find(s => s.id === studentId);
-  const panel = document.getElementById(`stu-edit-${studentId}`);
+  const panel = document.getElementById(`stu-edit-${key}`);
   if (!student || !panel) return;
   const f = student.fields || {};
   const curVal = name => { const v = f[name]; return (typeof v === 'object' && v) ? (v.Value ?? '') : (v ?? ''); };
@@ -2954,7 +2963,11 @@ async function saveStudentEdits(studentId, btn){
     Object.assign(student.fields, changed);
     showToast('Student updated ✓', 'success');
     panel.style.display = 'none'; panel.innerHTML = '';
-    renderOpsSearch();
+    // Refresh the right context: a roster-row edit re-renders that roster;
+    // a search-card edit re-runs the lookup.
+    const m = /^r(\d+)_/.exec(key);
+    if (m){ renderClassRosterBody(Number(m[1])); }
+    else { renderOpsSearch(); }
   } catch(e){
     const msg = /accessDenied|Access denied/i.test(e.message)
       ? 'Access denied — your account needs write permission to the SharePoint Students list. Ask an admin to grant it.'
@@ -3022,6 +3035,14 @@ async function toggleClassRoster(idx){
   body.style.display = 'block';
   if (chev) chev.textContent = '▾';
   if (body.dataset.loaded) return;
+  await renderClassRosterBody(idx);
+}
+
+// Renders (or re-renders) the roster inside an expanded class row. Split out so
+// a student edit saved from within the roster can refresh just this roster.
+async function renderClassRosterBody(idx){
+  const body = document.getElementById(`srch-body-${idx}`);
+  if (!body) return;
 
   const r = _opsSearchClasses[idx];
   if (!r){ body.innerHTML = `<div class="error-state">Class not found — try searching again.</div>`; return; }
@@ -3048,18 +3069,21 @@ async function toggleClassRoster(idx){
     const f = s.fields;
     const email = map.email ? cellText(f[map.email]) : '';
     const status = map.status ? cellText(f[map.status]) : '';
+    const key = `r${idx}_${s.id}`;
     return `
       <tr>
         <td class="course">${escHtml(f.Title || '')}</td>
         <td>${email ? `<a href="mailto:${escHtml(email)}" style="color:var(--blue);">${escHtml(email)}</a>` : '—'}</td>
         <td>${status ? `<span class="pill ${studentStatusPillClass(status)}">${escHtml(status)}</span>` : '—'}</td>
-      </tr>`;
+        <td style="text-align:right;"><button class="srch-btn edit sm" onclick="openStudentEditor('${s.id}','${key}')">✎ Edit information</button></td>
+      </tr>
+      <tr class="stu-edit-tr"><td colspan="4" style="padding:0;"><div class="stu-edit" id="stu-edit-${key}" style="display:none;"></div></td></tr>`;
   }).join('');
 
   body.innerHTML = trButton + `
     <div class="table-wrap" style="margin-top:12px;">
       <table class="data-table">
-        <thead><tr><th>Name</th><th>Email</th><th>Status</th></tr></thead>
+        <thead><tr><th>Name</th><th>Email</th><th>Status</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
