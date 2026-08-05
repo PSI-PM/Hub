@@ -1099,6 +1099,26 @@ function fieldVal(f, key){
   if (v == null) return '';
   return typeof v === 'object' ? (v.Value ?? v.LookupValue ?? '') : v;
 }
+// The Instructor column is a multi-select Choice, so Graph may return a single
+// string (one selection) or an array of strings (several). Normalize to an
+// array of clean names so every read handles both shapes.
+function instructorNames(fields){
+  const raw = fields ? fields.Instructor : null;
+  if (raw == null) return [];
+  const arr = Array.isArray(raw) ? raw : [raw];
+  return arr
+    .map(x => (x && typeof x === 'object') ? (x.Value ?? x.LookupValue ?? '') : x)
+    .map(x => String(x == null ? '' : x).trim())
+    .filter(Boolean);
+}
+// Display form: "A", "A & B", or "A, B & C".
+function instructorLabel(fields){
+  const names = instructorNames(fields);
+  if (!names.length) return '';
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} & ${names[1]}`;
+  return `${names.slice(0,-1).join(', ')} & ${names[names.length-1]}`;
+}
 function trainingRecordsUrl(courseTitle){
   if (!courseTitle) return null;
   const idParam = encodeURIComponent(`${CONFIG.sitePath}/Training Records/${courseTitle}`);
@@ -2273,6 +2293,12 @@ function namesMatch(a, b){
   if (normA === firstB || normB === firstA) return true;
   return firstA === firstB;
 }
+// True if `me` matches any instructor on the class/record (multi-select safe).
+function isMyClass(fields, me){
+  const names = instructorNames(fields);
+  if (!names.length) return false;
+  return names.some(n => namesMatch(n, me));
+}
 
 function renderMyUpcomingClasses(){
   const tbody = document.getElementById('my-classes-rows');
@@ -2292,7 +2318,7 @@ function renderMyUpcomingClasses(){
   const mine = state.courses.filter(c => {
     const status = fieldVal(c.fields, 'Status');
     if (status !== 'Upcoming' && status !== 'In Progress') return false;
-    if (!namesMatch(fieldVal(c.fields, 'Instructor'), myName)) return false;
+    if (!isMyClass(c.fields, myName)) return false;
     if (!c.fields.StartDate) return true;
     return new Date(c.fields.StartDate) <= cutoff;
   }).sort((a,b) => new Date(a.fields.StartDate || 0) - new Date(b.fields.StartDate || 0));
@@ -3265,7 +3291,7 @@ function renderUpcomingClasses(){
     const courseType = fieldVal(f, 'CourseType') || f.Title || '';
     const courseNum = f.Title || '—';
     const partner = fieldVal(f, 'Partner');
-    const instructor = fieldVal(f, 'Instructor');
+    const instructor = instructorLabel(f);
     const status = fieldVal(f, 'Status');
     const start = f.StartDate ? formatDateShort(new Date(f.StartDate)) : '—';
     const end = f.EndDate ? formatDateShort(new Date(f.EndDate)) : '—';
@@ -3295,10 +3321,13 @@ function renderInstructorAssignments(){
 
   const byInstructor = {};
   active.forEach(c => {
-    const instructor = fieldVal(c.fields, 'Instructor') || 'Unassigned';
     const courseType = fieldVal(c.fields, 'CourseType') || c.fields.Title || 'Course';
-    if (!byInstructor[instructor]) byInstructor[instructor] = [];
-    byInstructor[instructor].push(courseType);
+    const names = instructorNames(c.fields);
+    const targets = names.length ? names : ['Unassigned'];
+    targets.forEach(instructor => {
+      if (!byInstructor[instructor]) byInstructor[instructor] = [];
+      byInstructor[instructor].push(courseType);
+    });
   });
 
   const names = Object.keys(byInstructor).sort();
@@ -3367,7 +3396,8 @@ function updateGreetingSummary(){
     const now = new Date();
     return start <= cutoff && end >= now;
   });
-  const instructors = new Set(thisWeek.map(c => fieldVal(c.fields, 'Instructor')).filter(Boolean));
+  const instructors = new Set();
+  thisWeek.forEach(c => instructorNames(c.fields).forEach(n => instructors.add(n)));
   const dateStr = new Date().toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
   if (thisWeek.length){
     document.getElementById('greeting-sub').textContent =
