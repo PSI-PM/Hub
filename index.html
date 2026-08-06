@@ -605,16 +605,8 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
       </div>
     </div>
 
-    <!-- RECENT DOCUMENTS + CONTACT DIRECTORY -->
-    <div class="row two-even" style="margin-bottom:0;">
-      <div class="card">
-        <h2>Recent documents</h2>
-        <div id="recent-docs-list">
-          <div class="skeleton-line" style="width:100%"></div>
-          <div class="skeleton-line" style="width:85%"></div>
-          <div class="skeleton-line" style="width:92%"></div>
-        </div>
-      </div>
+    <!-- CONTACT DIRECTORY -->
+    <div class="row" style="margin-bottom:0;">
       <div class="card">
         <h2>Contact directory</h2>
         <div id="contacts-list"></div>
@@ -1077,7 +1069,7 @@ const msalApp = new msal.PublicClientApplication({
     authority: `https://login.microsoftonline.com/${CONFIG.tenantId}`,
     redirectUri: window.location.origin + window.location.pathname,
   },
-  cache: { cacheLocation: 'sessionStorage' },
+  cache: { cacheLocation: 'localStorage' },
 });
 
 let state = { user: null, courses: [], students: [], availability: [], announcements: [], announcementsListId: null, annCols: null, importantDates: [], importantDatesListId: null, datesCols: null };
@@ -1122,10 +1114,13 @@ function instructorLabel(fields){
 function trainingRecordsUrl(courseTitle){
   if (!courseTitle) return null;
   const idParam = encodeURIComponent(`${CONFIG.sitePath}/Training Records/${courseTitle}`);
-  const viewId = 'b8a23500-52b1-4ddc-a507-c8340b89fd4e';
   const newTargetListUrl = encodeURIComponent(`${CONFIG.sitePath}/Training Records`);
-  const viewPath = encodeURIComponent(`${CONFIG.sitePath}/Training Records/Forms/AllItems.aspx`);
-  return `https://${CONFIG.siteHostname}${CONFIG.sitePath}/Training%20Records/Forms/AllItems.aspx?id=${idParam}&viewid=${viewId}&newTargetListUrl=${newTargetListUrl}&viewpath=${viewPath}`;
+  // Deep-link to the class folder using only the folder path (id=). We deliberately
+  // omit viewid/viewpath: a saved-view GUID is often a PERSONAL view that only its
+  // creator can open, which made this link fail with "can't open file" for every
+  // other instructor. Without it, SharePoint uses the library's default (public)
+  // view, which all site members can access.
+  return `https://${CONFIG.siteHostname}${CONFIG.sitePath}/Training%20Records/Forms/AllItems.aspx?id=${idParam}&newTargetListUrl=${newTargetListUrl}`;
 }
 function formatDateShort(d){
   return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
@@ -2233,15 +2228,6 @@ async function loadDashboardData(){
   } catch(e){
     console.error('Important dates load failed:', e);
     renderImportantDatesFallback();
-  }
-
-  // Recent documents loaded separately so one failure doesn't block the rest
-  try {
-    await renderRecentDocuments();
-  } catch(e){
-    console.error('Recent documents load failed:', e);
-    document.getElementById('recent-docs-list').innerHTML =
-      `<div class="error-state">Couldn't load recent documents.</div>`;
   }
 }
 
@@ -3351,38 +3337,8 @@ function renderInstructorAssignments(){
 }
 
 async function renderRecentDocuments(){
-  const list = document.getElementById('recent-docs-list');
-  const data = await graphGet(
-    `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.trainingRecordsListId}/drive/root/children?$orderby=lastModifiedDateTime desc&$top=5`
-  );
-  const items = (data.value || []).filter(i => i.file);
-
-  if (!items.length){
-    list.innerHTML = `<div class="empty-state">No recent documents.</div>`;
-    return;
-  }
-
-  const iconFor = (name) => {
-    if (/\.pdf$/i.test(name)) return '📄';
-    if (/\.(ppt|pptx)$/i.test(name)) return '📊';
-    if (/\.(doc|docx)$/i.test(name)) return '📝';
-    if (/\.(xls|xlsx|csv)$/i.test(name)) return '📈';
-    return '📁';
-  };
-
-  list.innerHTML = items.map(i => {
-    const modified = i.lastModifiedDateTime ? new Date(i.lastModifiedDateTime) : null;
-    const modBy = i.lastModifiedBy && i.lastModifiedBy.user ? i.lastModifiedBy.user.displayName : 'Unknown';
-    const when = modified ? formatDateShort(modified) : '';
-    return `
-      <div class="doc-row">
-        <span class="ic">${iconFor(i.name)}</span>
-        <div>
-          <div class="name">${i.name}</div>
-          <div class="meta">Modified by ${modBy} — ${when}</div>
-        </div>
-      </div>`;
-  }).join('');
+  // Removed — the Recent Documents card was retired from the Home tab.
+  // (Left as a no-op so any stray reference can't throw.)
 }
 
 function updateGreetingSummary(){
