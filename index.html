@@ -613,7 +613,7 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
 
     <!-- UPCOMING CLASSES -->
     <div class="card" style="margin-bottom:18px;">
-      <h2>Upcoming classes <span class="badge">Next 90 days</span></h2>
+      <h2>Upcoming classes <span class="badge">Next 45 days</span></h2>
       <div class="table-wrap">
         <table class="data-table" id="classes-table" style="display:none;">
           <thead>
@@ -701,6 +701,17 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
         <p style="font-size:12.5px;color:var(--gray-500);margin-bottom:14px;">Search a student by name or email, or a class by its course number (e.g. E26-Mid-F7) — including legacy classes that only exist on student records. Click a student's name to edit their record. Classes open the full roster.</p>
         <input type="text" class="srch-input" id="ic-search" placeholder="Search students or course numbers…" oninput="renderOpsSearch()" autocomplete="off">
         <div id="ic-search-results" class="srch-results"></div>
+      </div>
+
+      <!-- COURSE CALENDAR (thin bar → modal) -->
+      <div class="card cal-bar-card" style="margin-bottom:18px;">
+        <div class="cal-bar-inner">
+          <div class="cal-bar-text">
+            <span class="cal-bar-title">Course calendar</span>
+            <span class="cal-bar-sub">Month view of every course, color-coded by instructor.</span>
+          </div>
+          <button class="cal-open-btn" onclick="openCourseCalendar()">📅 Open calendar</button>
+        </div>
       </div>
 
       <!-- TEACHING RESOURCES -->
@@ -3003,10 +3014,13 @@ function holidayNameFor(date){
 }
 
 function calColorForCourse(fields){
+  // Color is driven by the LEAD (first-listed) instructor only. If the lead has
+  // no assigned color, the bar uses the default (light purple) — it does not fall
+  // through to a co-instructor's color.
   const names = instructorNames(fields);
-  for (const n of names){
-    const first = n.trim().split(/\s+/)[0].toLowerCase();
-    if (CAL_INSTRUCTOR_COLORS[first]) return CAL_INSTRUCTOR_COLORS[first];
+  if (names.length){
+    const lead = names[0].trim().split(/\s+/)[0].toLowerCase();
+    if (CAL_INSTRUCTOR_COLORS[lead]) return CAL_INSTRUCTOR_COLORS[lead];
   }
   return CAL_DEFAULT_COLOR;
 }
@@ -3110,8 +3124,11 @@ function renderCourseCalendar(){
     segs.forEach(seg => {
       const col = calColorForCourse(seg.c.f);
       const names = instructorNames(seg.c.f);
-      const instr = names.length ? names[0].split(/\s+/)[0] : 'Unassigned';
-      const label = `${seg.c.title}${instr ? ' · ' + instr : ''}`;
+      // Show every instructor (lead first, in listed order); the bar COLOR is
+      // driven by the lead (first-listed) instructor via calColorForCourse.
+      const firsts = names.map(n => n.split(/\s+/)[0]);
+      const instr = firsts.length ? firsts.join(' & ') : 'Unassigned';
+      const label = `${seg.c.title} · ${instr}`;
       bars += `<div class="cal-bar" title="${escHtml(seg.c.title + ' — ' + (names.join(', ')||'Unassigned'))}" `
         + `style="grid-column:${seg.startCol+1} / ${seg.endCol+2};--lane:${seg.lane+2};background:${col.bg};color:${col.fg};">`
         + `${escHtml(label)}</div>`;
@@ -3524,7 +3541,7 @@ async function downloadMasterStudentList(btn){
 }
 
 function renderUpcomingClasses(){
-  const cutoff = daysFromNow(90);
+  const cutoff = daysFromNow(45);
   const upcoming = state.courses.filter(c => {
     const status = fieldVal(c.fields, 'Status');
     if (status !== 'Upcoming' && status !== 'In Progress') return false;
