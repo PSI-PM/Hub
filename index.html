@@ -277,6 +277,7 @@ button { cursor:pointer; font-family:inherit; }
 .cal-week { display:grid; grid-template-columns:repeat(7,1fr); column-gap:0; row-gap:2px; position:relative; padding-bottom:4px; }
 .cal-daycell { grid-row:1 / -1; border-right:0.5px solid rgba(0,140,255,0.08); border-top:0.5px solid rgba(0,140,255,0.08); min-height:30px; }
 .cal-daycell:nth-child(7) { border-right:none; }
+.cal-daycell.weekend { background:rgba(0,0,0,0.22); }
 .cal-daycell.other { background:rgba(0,0,0,0.15); }
 .cal-daycell.today { background:rgba(0,140,255,0.1); }
 .cal-daynum { grid-row:1; text-align:right; font-size:11px; color:var(--gray-500); padding:3px 6px 2px; z-index:1; }
@@ -289,6 +290,8 @@ button { cursor:pointer; font-family:inherit; }
 .cal-leg-item { display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--gray-500); }
 .cal-leg-sw { width:22px; height:12px; border-radius:3px; }
 .cal-empty { grid-column:1 / -1; text-align:center; color:var(--gray-500); padding:30px; font-size:13px; }
+.cal-daycell.holiday { background:rgba(210,120,140,0.13); }
+.cal-holname { grid-row:1; font-size:8.5px; font-weight:600; color:#e79ab0; padding:0 5px; margin-top:-2px; line-height:1.15; white-space:normal; overflow:hidden; text-overflow:ellipsis; z-index:1; }
 @media (max-width:640px){ .cal-bar-sub{display:none;} .cal-modal{padding:14px;} .cal-bar{font-size:8.5px;padding:0 3px;} }
 .stu-edit { border-top:0.5px solid rgba(0,140,255,0.15); margin-top:12px; padding-top:14px; }
 .stu-edit-head { font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--gray-500); margin-bottom:10px; }
@@ -2949,9 +2952,55 @@ const CAL_INSTRUCTOR_COLORS = {
   marcia: { bg:'#d64545', fg:'#ffffff' },  // red, white text
   amy:    { bg:'#8a99a8', fg:'#ffffff' },  // gray
 };
-const CAL_DEFAULT_COLOR = { bg:'#3d4d5e', fg:'#d8e6f2' }; // unassigned / other instructor
+const CAL_DEFAULT_COLOR = { bg:'#b39ddb', fg:'#241a3a' }; // unassigned → light purple
 
 let _calState = { year: null, month: null }; // month is 0-based
+
+// U.S. federal holidays, computed by rule so they're correct every year with no
+// maintenance. Observed-date shifting (Sat→Fri, Sun→Mon) is applied so the mark
+// lands on the weekday people actually take off — which matters since the
+// calendar only shows Mon–Fri.
+let _calHolidayCache = {};
+function federalHolidays(year){
+  if (_calHolidayCache[year]) return _calHolidayCache[year];
+  const nth = (n, weekday, month) => { // nth weekday (0=Sun) of month (0-based)
+    const d = new Date(year, month, 1);
+    let count = 0;
+    while (true){ if (d.getDay() === weekday){ count++; if (count === n) break; } d.setDate(d.getDate()+1); }
+    return new Date(year, month, d.getDate());
+  };
+  const lastMonday = (month) => { // Memorial Day: last Monday of May
+    const d = new Date(year, month+1, 0);
+    while (d.getDay() !== 1) d.setDate(d.getDate()-1);
+    return new Date(year, month, d.getDate());
+  };
+  const observed = (m, day) => { // fixed-date holiday, shifted to nearest weekday
+    const d = new Date(year, m, day);
+    const wd = d.getDay();
+    if (wd === 6) return new Date(year, m, day-1); // Sat → observed Fri
+    if (wd === 0) return new Date(year, m, day+1); // Sun → observed Mon
+    return d;
+  };
+  const map = {};
+  const add = (dt, name) => { map[`${dt.getFullYear()}-${dt.getMonth()}-${dt.getDate()}`] = name; };
+  add(observed(0,1),  "New Year's Day");
+  add(nth(3,1,0),     "MLK Jr. Day");             // 3rd Monday Jan
+  add(nth(3,1,1),     "Presidents' Day");         // 3rd Monday Feb
+  add(lastMonday(4),  "Memorial Day");            // last Monday May
+  add(observed(5,19), "Juneteenth");
+  add(observed(6,4),  "Independence Day");
+  add(nth(1,1,8),     "Labor Day");               // 1st Monday Sep
+  add(nth(2,1,9),     "Columbus Day");            // 2nd Monday Oct
+  add(observed(10,11),"Veterans Day");
+  add(nth(4,4,10),    "Thanksgiving");            // 4th Thursday Nov
+  add(observed(11,25),"Christmas Day");
+  _calHolidayCache[year] = map;
+  return map;
+}
+function holidayNameFor(date){
+  const m = federalHolidays(date.getFullYear());
+  return m[`${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`] || null;
+}
 
 function calColorForCourse(fields){
   const names = instructorNames(fields);
@@ -2992,6 +3041,10 @@ function renderCourseCalendar(){
 
   const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const todayKey = startOfDay(new Date()).getTime();
+  // Weekends are shown but never taught on. A "meet day" is Mon–Fri (Mon–Thu for
+  // E-prefixed courses); bars are only placed on meet days, so a course spanning
+  // a weekend breaks around it.
+  const isWeekend = wd => wd === 0 || wd === 6;
 
   const courses = (state.courses || []).map(c => {
     const f = c.fields || {};
@@ -2999,23 +3052,39 @@ function renderCourseCalendar(){
     let e = f.EndDate ? parseDateOnly(f.EndDate) : null;
     if (!s) return null;
     if (!e || e < s) e = s;
-    return { f, s: startOfDay(s), e: startOfDay(e), title: String(f.Title || '').trim() || '(untitled)' };
+    const isE = /^e/i.test(String(f.Title || '').trim());
+    return { f, s: startOfDay(s), e: startOfDay(e), isE, title: String(f.Title || '').trim() || '(untitled)' };
   }).filter(Boolean);
 
   let html = '';
   for (let w = 0; w < weekCount; w++){
     const weekStart = new Date(gridStart); weekStart.setDate(gridStart.getDate() + w*7);
-    const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 6);
-    const wS = startOfDay(weekStart).getTime(), wE = startOfDay(weekEnd).getTime();
+    // All 7 dates of the week (Sun..Sat), one per column 0..6.
+    const days = [];
+    for (let col = 0; col < 7; col++){
+      const day = new Date(weekStart); day.setDate(weekStart.getDate() + col);
+      days[col] = day;
+    }
 
+    // Segments: contiguous runs of meet-day columns a course occupies this week.
+    // Weekends (and Fridays for E-courses) are non-meet, so they break the run.
     const segs = [];
     courses.forEach(c => {
-      if (c.e.getTime() < wS || c.s.getTime() > wE) return;
-      const segStart = c.s.getTime() < wS ? 0 : Math.round((c.s.getTime() - wS) / 86400000);
-      const segEnd = c.e.getTime() > wE ? 6 : Math.round((c.e.getTime() - wS) / 86400000);
-      segs.push({ c, startCol: segStart, endCol: segEnd,
-                  contL: c.s.getTime() < wS, contR: c.e.getTime() > wE });
+      let runStart = -1, runEnd = -1;
+      const flush = () => {
+        if (runStart >= 0){ segs.push({ c, startCol: runStart, endCol: runEnd }); runStart = runEnd = -1; }
+      };
+      for (let col = 0; col < 7; col++){
+        const day = days[col];
+        const wd = day.getDay();
+        const inRange = startOfDay(day).getTime() >= c.s.getTime() && startOfDay(day).getTime() <= c.e.getTime();
+        const meets = inRange && !isWeekend(wd) && !(c.isE && wd === 5); // no weekends; E skips Fri
+        if (meets){ if (runStart < 0) runStart = col; runEnd = col; }
+        else { flush(); }
+      }
+      flush();
     });
+
     segs.sort((a,b) => a.startCol - b.startCol || (b.endCol-b.startCol) - (a.endCol-a.startCol));
     const lanes = [];
     segs.forEach(seg => {
@@ -3027,12 +3096,15 @@ function renderCourseCalendar(){
     const laneCount = Math.max(1, lanes.length);
 
     let cells = '';
-    for (let d = 0; d < 7; d++){
-      const day = new Date(weekStart); day.setDate(weekStart.getDate() + d);
+    for (let col = 0; col < 7; col++){
+      const day = days[col];
       const inMonth = day.getMonth() === month;
       const isToday = startOfDay(day).getTime() === todayKey;
-      cells += `<div class="cal-daycell${inMonth?'':' other'}${isToday?' today':''}" style="grid-column:${d+1};"></div>`;
-      cells += `<div class="cal-daynum${inMonth?'':' other'}${isToday?' today':''}" style="grid-column:${d+1};grid-row:1;">${day.getDate()}</div>`;
+      const weekend = isWeekend(day.getDay());
+      const holiday = holidayNameFor(day);
+      cells += `<div class="cal-daycell${inMonth?'':' other'}${isToday?' today':''}${weekend?' weekend':''}${holiday?' holiday':''}" style="grid-column:${col+1};"></div>`;
+      cells += `<div class="cal-daynum${inMonth?'':' other'}${isToday?' today':''}" style="grid-column:${col+1};grid-row:1;">${day.getDate()}</div>`;
+      if (holiday) cells += `<div class="cal-holname" style="grid-column:${col+1};grid-row:1;margin-top:15px;">${escHtml(holiday)}</div>`;
     }
     let bars = '';
     segs.forEach(seg => {
@@ -3040,8 +3112,7 @@ function renderCourseCalendar(){
       const names = instructorNames(seg.c.f);
       const instr = names.length ? names[0].split(/\s+/)[0] : 'Unassigned';
       const label = `${seg.c.title}${instr ? ' · ' + instr : ''}`;
-      const contClass = `${seg.contL?' cont-l':''}${seg.contR?' cont-r':''}`;
-      bars += `<div class="cal-bar${contClass}" title="${escHtml(seg.c.title + ' — ' + (names.join(', ')||'Unassigned'))}" `
+      bars += `<div class="cal-bar" title="${escHtml(seg.c.title + ' — ' + (names.join(', ')||'Unassigned'))}" `
         + `style="grid-column:${seg.startCol+1} / ${seg.endCol+2};--lane:${seg.lane+2};background:${col.bg};color:${col.fg};">`
         + `${escHtml(label)}</div>`;
     });
@@ -3063,7 +3134,8 @@ function renderCourseCalendar(){
   const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
   let legend = order.filter(k => present.has(k)).map(k =>
     `<div class="cal-leg-item"><span class="cal-leg-sw" style="background:${CAL_INSTRUCTOR_COLORS[k].bg}"></span>${cap(k)}</div>`).join('');
-  if (usedDefault) legend += `<div class="cal-leg-item"><span class="cal-leg-sw" style="background:${CAL_DEFAULT_COLOR.bg}"></span>Other / unassigned</div>`;
+  if (usedDefault) legend += `<div class="cal-leg-item"><span class="cal-leg-sw" style="background:${CAL_DEFAULT_COLOR.bg}"></span>Unassigned</div>`;
+  legend += `<div class="cal-leg-item"><span class="cal-leg-sw" style="background:rgba(210,120,140,0.3)"></span>Federal holiday</div>`;
   document.getElementById('cal-legend').innerHTML = legend;
 }
 
