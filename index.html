@@ -251,7 +251,45 @@ button { cursor:pointer; font-family:inherit; }
 .srch-note { font-size:11.5px; color:var(--gray-500); margin-top:10px; line-height:1.5; }
 @media (max-width:640px) { .srch-meta-grid { grid-template-columns:1fr; } }
 
-/* ── STUDENT EDITOR (opened from a lookup card or roster row) ── */
+/* ── COURSE CALENDAR ── */
+.cal-bar-card { padding:14px 20px; }
+.cal-bar-inner { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.cal-bar-title { font-weight:600; color:var(--gray-900); font-size:14px; }
+.cal-bar-sub { color:var(--gray-500); font-size:12.5px; margin-left:10px; }
+.cal-open-btn { padding:9px 18px; border-radius:9px; border:0.5px solid rgba(0,180,255,0.4); background:rgba(0,140,255,0.14); color:var(--gray-700); font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; }
+.cal-open-btn:hover { background:rgba(0,140,255,0.24); color:var(--gray-900); }
+
+.cal-modal-overlay { display:none; position:fixed; inset:0; z-index:200; background:rgba(2,8,20,0.72); backdrop-filter:blur(3px); padding:28px; overflow:auto; }
+.cal-modal-overlay.open { display:flex; align-items:flex-start; justify-content:center; }
+.cal-modal { background:linear-gradient(180deg,#0a1830,#081227); border:0.5px solid var(--card-border); border-radius:16px; width:100%; max-width:1080px; margin:auto; padding:18px 20px 20px; box-shadow:0 20px 60px rgba(0,0,0,0.5); }
+.cal-modal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.cal-nav { display:flex; align-items:center; gap:10px; }
+.cal-navbtn { width:32px; height:32px; border-radius:8px; border:0.5px solid var(--card-border); background:rgba(0,140,255,0.1); color:var(--gray-700); font-size:18px; line-height:1; cursor:pointer; font-family:inherit; }
+.cal-navbtn:hover { background:rgba(0,140,255,0.2); color:#fff; }
+.cal-monthlabel { font-family:'Playfair Display',serif; font-size:19px; color:var(--gray-900); min-width:180px; text-align:center; }
+.cal-today { padding:7px 14px; border-radius:8px; border:0.5px solid rgba(0,180,255,0.4); background:rgba(0,140,255,0.14); color:var(--gray-700); font-size:12.5px; font-weight:600; cursor:pointer; font-family:inherit; margin-left:6px; }
+.cal-today:hover { background:rgba(0,140,255,0.24); color:#fff; }
+.cal-close { width:34px; height:34px; border-radius:8px; border:0.5px solid var(--card-border); background:transparent; color:var(--gray-500); font-size:15px; cursor:pointer; font-family:inherit; }
+.cal-close:hover { color:#fff; background:rgba(255,80,80,0.14); }
+.cal-weekhead { display:grid; grid-template-columns:repeat(7,1fr); gap:0; margin-bottom:4px; }
+.cal-weekhead div { text-align:center; font-size:10.5px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; color:var(--gray-500); padding:4px 0; }
+.cal-weeks { display:flex; flex-direction:column; gap:0; border:0.5px solid rgba(0,140,255,0.12); border-radius:8px; overflow:hidden; }
+.cal-week { display:grid; grid-template-columns:repeat(7,1fr); column-gap:0; row-gap:2px; position:relative; padding-bottom:4px; }
+.cal-daycell { grid-row:1 / -1; border-right:0.5px solid rgba(0,140,255,0.08); border-top:0.5px solid rgba(0,140,255,0.08); min-height:30px; }
+.cal-daycell:nth-child(7) { border-right:none; }
+.cal-daycell.other { background:rgba(0,0,0,0.15); }
+.cal-daycell.today { background:rgba(0,140,255,0.1); }
+.cal-daynum { grid-row:1; text-align:right; font-size:11px; color:var(--gray-500); padding:3px 6px 2px; z-index:1; }
+.cal-daynum.other { color:rgba(120,150,180,0.4); }
+.cal-daynum.today { color:#fff; font-weight:700; }
+.cal-bar { grid-row:var(--lane); align-self:start; margin:1px 2px; height:17px; border-radius:4px; font-size:10px; font-weight:600; line-height:17px; padding:0 6px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; z-index:2; cursor:default; }
+.cal-bar.cont-l { border-top-left-radius:0; border-bottom-left-radius:0; }
+.cal-bar.cont-r { border-top-right-radius:0; border-bottom-right-radius:0; }
+.cal-legend { display:flex; flex-wrap:wrap; gap:12px; margin-top:14px; padding-top:12px; border-top:0.5px solid rgba(0,140,255,0.12); }
+.cal-leg-item { display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--gray-500); }
+.cal-leg-sw { width:22px; height:12px; border-radius:3px; }
+.cal-empty { grid-column:1 / -1; text-align:center; color:var(--gray-500); padding:30px; font-size:13px; }
+@media (max-width:640px){ .cal-bar-sub{display:none;} .cal-modal{padding:14px;} .cal-bar{font-size:8.5px;padding:0 3px;} }
 .stu-edit { border-top:0.5px solid rgba(0,140,255,0.15); margin-top:12px; padding-top:14px; }
 .stu-edit-head { font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--gray-500); margin-bottom:10px; }
 .stu-edit-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; }
@@ -466,6 +504,24 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
 
 <div class="loading-overlay" id="loading"><div class="spinner"></div></div>
 <div class="toast" id="toast"></div>
+<div class="cal-modal-overlay" id="cal-modal" onclick="if(event.target===this)closeCourseCalendar()">
+  <div class="cal-modal">
+    <div class="cal-modal-head">
+      <div class="cal-nav">
+        <button class="cal-navbtn" onclick="calShiftMonth(-1)" aria-label="Previous month">‹</button>
+        <div class="cal-monthlabel" id="cal-monthlabel"></div>
+        <button class="cal-navbtn" onclick="calShiftMonth(1)" aria-label="Next month">›</button>
+        <button class="cal-today" onclick="calJumpToday()">Today</button>
+      </div>
+      <button class="cal-close" onclick="closeCourseCalendar()" aria-label="Close">✕</button>
+    </div>
+    <div class="cal-weekhead">
+      <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+    </div>
+    <div class="cal-weeks" id="cal-weeks"></div>
+    <div class="cal-legend" id="cal-legend"></div>
+  </div>
+</div>
 
 <!-- LOGIN -->
 <div class="screen active" id="screen-login">
@@ -708,6 +764,17 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
         <p style="font-size:12.5px;color:var(--gray-500);margin-bottom:14px;">Search a student by name or email, or a class by its course number (e.g. E26-Mid-F7) — including legacy classes that only exist on student records. Students return a detail card with links to their training records; classes open the full roster.</p>
         <input type="text" class="srch-input" id="ops-search" placeholder="Search students or course numbers…" oninput="renderOpsSearch()" autocomplete="off">
         <div id="ops-search-results" class="srch-results"></div>
+      </div>
+
+      <!-- COURSE CALENDAR (thin bar → modal) -->
+      <div class="card cal-bar-card" style="margin-bottom:18px;">
+        <div class="cal-bar-inner">
+          <div class="cal-bar-text">
+            <span class="cal-bar-title">Course calendar</span>
+            <span class="cal-bar-sub">Month view of every course, color-coded by instructor.</span>
+          </div>
+          <button class="cal-open-btn" onclick="openCourseCalendar()">📅 Open calendar</button>
+        </div>
       </div>
 
       <div class="section-label-sm">Enrollment</div>
@@ -2867,6 +2934,137 @@ function renderStudentCard(s, map){
         <div class="stu-edit" id="stu-edit-${s.id}" style="display:none;"></div>
       </div>
     </div>`;
+}
+
+// ── COURSE CALENDAR ────────────────────────────────────────────────
+// A month view of every course from the Courses list, drawn as bars that
+// stretch across each course's run and stack into lanes when they overlap.
+// Bars are colored by instructor (first matching instructor wins on co-taught
+// classes); the label shows the course number and instructor.
+const CAL_INSTRUCTOR_COLORS = {
+  roy:    { bg:'#E08A2C', fg:'#2a1806' },  // orange
+  scott:  { bg:'#2f7fd6', fg:'#ffffff' },  // blue, white text
+  jerry:  { bg:'#25a36c', fg:'#ffffff' },  // green, white text
+  wanda:  { bg:'#e0c020', fg:'#332c05' },  // yellow, dark text
+  marcia: { bg:'#d64545', fg:'#ffffff' },  // red, white text
+  amy:    { bg:'#8a99a8', fg:'#ffffff' },  // gray
+};
+const CAL_DEFAULT_COLOR = { bg:'#3d4d5e', fg:'#d8e6f2' }; // unassigned / other instructor
+
+let _calState = { year: null, month: null }; // month is 0-based
+
+function calColorForCourse(fields){
+  const names = instructorNames(fields);
+  for (const n of names){
+    const first = n.trim().split(/\s+/)[0].toLowerCase();
+    if (CAL_INSTRUCTOR_COLORS[first]) return CAL_INSTRUCTOR_COLORS[first];
+  }
+  return CAL_DEFAULT_COLOR;
+}
+
+function openCourseCalendar(){
+  const now = new Date();
+  if (_calState.year == null){ _calState.year = now.getFullYear(); _calState.month = now.getMonth(); }
+  document.getElementById('cal-modal').classList.add('open');
+  renderCourseCalendar();
+}
+function closeCourseCalendar(){ document.getElementById('cal-modal').classList.remove('open'); }
+function calShiftMonth(delta){
+  let m = _calState.month + delta, y = _calState.year;
+  if (m < 0){ m = 11; y--; } else if (m > 11){ m = 0; y++; }
+  _calState.month = m; _calState.year = y;
+  renderCourseCalendar();
+}
+function calJumpToday(){ const n = new Date(); _calState.year = n.getFullYear(); _calState.month = n.getMonth(); renderCourseCalendar(); }
+
+function renderCourseCalendar(){
+  const { year, month } = _calState;
+  const label = new Date(year, month, 1).toLocaleDateString('en-US', { month:'long', year:'numeric' });
+  document.getElementById('cal-monthlabel').textContent = label;
+
+  const weeksEl = document.getElementById('cal-weeks');
+
+  const first = new Date(year, month, 1);
+  const gridStart = new Date(year, month, 1 - first.getDay());
+  const last = new Date(year, month + 1, 0);
+  const totalDays = first.getDay() + last.getDate();
+  const weekCount = Math.ceil(totalDays / 7);
+
+  const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const todayKey = startOfDay(new Date()).getTime();
+
+  const courses = (state.courses || []).map(c => {
+    const f = c.fields || {};
+    const s = f.StartDate ? parseDateOnly(f.StartDate) : null;
+    let e = f.EndDate ? parseDateOnly(f.EndDate) : null;
+    if (!s) return null;
+    if (!e || e < s) e = s;
+    return { f, s: startOfDay(s), e: startOfDay(e), title: String(f.Title || '').trim() || '(untitled)' };
+  }).filter(Boolean);
+
+  let html = '';
+  for (let w = 0; w < weekCount; w++){
+    const weekStart = new Date(gridStart); weekStart.setDate(gridStart.getDate() + w*7);
+    const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 6);
+    const wS = startOfDay(weekStart).getTime(), wE = startOfDay(weekEnd).getTime();
+
+    const segs = [];
+    courses.forEach(c => {
+      if (c.e.getTime() < wS || c.s.getTime() > wE) return;
+      const segStart = c.s.getTime() < wS ? 0 : Math.round((c.s.getTime() - wS) / 86400000);
+      const segEnd = c.e.getTime() > wE ? 6 : Math.round((c.e.getTime() - wS) / 86400000);
+      segs.push({ c, startCol: segStart, endCol: segEnd,
+                  contL: c.s.getTime() < wS, contR: c.e.getTime() > wE });
+    });
+    segs.sort((a,b) => a.startCol - b.startCol || (b.endCol-b.startCol) - (a.endCol-a.startCol));
+    const lanes = [];
+    segs.forEach(seg => {
+      let lane = 0;
+      while (lane < lanes.length && lanes[lane] >= seg.startCol) lane++;
+      lanes[lane] = seg.endCol;
+      seg.lane = lane;
+    });
+    const laneCount = Math.max(1, lanes.length);
+
+    let cells = '';
+    for (let d = 0; d < 7; d++){
+      const day = new Date(weekStart); day.setDate(weekStart.getDate() + d);
+      const inMonth = day.getMonth() === month;
+      const isToday = startOfDay(day).getTime() === todayKey;
+      cells += `<div class="cal-daycell${inMonth?'':' other'}${isToday?' today':''}" style="grid-column:${d+1};"></div>`;
+      cells += `<div class="cal-daynum${inMonth?'':' other'}${isToday?' today':''}" style="grid-column:${d+1};grid-row:1;">${day.getDate()}</div>`;
+    }
+    let bars = '';
+    segs.forEach(seg => {
+      const col = calColorForCourse(seg.c.f);
+      const names = instructorNames(seg.c.f);
+      const instr = names.length ? names[0].split(/\s+/)[0] : 'Unassigned';
+      const label = `${seg.c.title}${instr ? ' · ' + instr : ''}`;
+      const contClass = `${seg.contL?' cont-l':''}${seg.contR?' cont-r':''}`;
+      bars += `<div class="cal-bar${contClass}" title="${escHtml(seg.c.title + ' — ' + (names.join(', ')||'Unassigned'))}" `
+        + `style="grid-column:${seg.startCol+1} / ${seg.endCol+2};--lane:${seg.lane+2};background:${col.bg};color:${col.fg};">`
+        + `${escHtml(label)}</div>`;
+    });
+
+    html += `<div class="cal-week" style="grid-template-rows:auto repeat(${laneCount},18px);">${cells}${bars}</div>`;
+  }
+
+  weeksEl.innerHTML = html || `<div class="cal-empty">No courses to show.</div>`;
+
+  const present = new Set();
+  let usedDefault = false;
+  courses.forEach(c => {
+    const names = instructorNames(c.f);
+    let matched = false;
+    names.forEach(n => { const fk = n.split(/\s+/)[0].toLowerCase(); if (CAL_INSTRUCTOR_COLORS[fk]){ present.add(fk); matched = true; } });
+    if (!matched) usedDefault = true;
+  });
+  const order = ['roy','scott','jerry','wanda','marcia','amy'];
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  let legend = order.filter(k => present.has(k)).map(k =>
+    `<div class="cal-leg-item"><span class="cal-leg-sw" style="background:${CAL_INSTRUCTOR_COLORS[k].bg}"></span>${cap(k)}</div>`).join('');
+  if (usedDefault) legend += `<div class="cal-leg-item"><span class="cal-leg-sw" style="background:${CAL_DEFAULT_COLOR.bg}"></span>Other / unassigned</div>`;
+  document.getElementById('cal-legend').innerHTML = legend;
 }
 
 // ── STUDENT EDITOR ─────────────────────────────────────────────────
