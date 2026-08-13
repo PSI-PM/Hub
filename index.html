@@ -2064,6 +2064,17 @@ function isEmailValue(v){ return typeof v === 'string' && /\S+@\S+\.\S+/.test(v)
 function isPhoneValue(v){ return typeof v === 'string' && /(?:\d[\s\-().]*){7,}/.test(v); }
 function isStatusValue(v){ return ['Enrolled','Completed','In Progress','Withdrawn'].includes(v); }
 function isDateLikeValue(v){ return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v); }
+// Client is free-form text (e.g. "Trident Technical College", "Piedmont", "Retake"),
+// so we can't match a pattern — instead accept a non-empty string that clearly
+// isn't an email, phone, date, or status value.
+function isClientValue(v){
+  if (typeof v === 'object' && v){ v = v.Value ?? v.LookupValue ?? ''; }
+  if (typeof v !== 'string') return false;
+  const s = v.trim();
+  if (!s) return false;
+  if (isEmailValue(s) || isPhoneValue(s) || isDateLikeValue(s) || isStatusValue(s)) return false;
+  return /[A-Za-z]/.test(s);   // has letters (a real client/label, not a number)
+}
 // Sniff guards: a date column must LOOK like a start/end column by name, so the
 // system timestamps every item carries (Modified, Created) can't be mistaken
 // for course dates.
@@ -2117,7 +2128,7 @@ async function downloadEnrollment(courseId, btn){
   try {
     const courseTitle = course.fields.Title || '';
     const courseNumId = String(course.fields.id || '');
-    const client = fieldVal(course.fields, 'Partner') || '';   // one client per class
+    const courseClient = fieldVal(course.fields, 'Partner') || '';   // fallback only
 
     // 1) All attendance rows for this course (paginated), matched the same way
     //    the Attendance Portal matches them.
@@ -2149,7 +2160,7 @@ async function downloadEnrollment(courseId, btn){
       `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.studentsListId}/items?expand=fields`
     );
     const fieldMap = await ensureStudentFieldMap(students);
-    const statusField = fieldMap.status, emailField = fieldMap.email, phoneField = fieldMap.phone;
+    const statusField = fieldMap.status, emailField = fieldMap.email, phoneField = fieldMap.phone, clientField = fieldMap.client;
     if (!statusField) console.warn('Could not resolve the Withdrawn status column — withdrawn students may not be filtered out.');
 
     const byId = new Map(), byName = new Map();
@@ -2177,7 +2188,7 @@ async function downloadEnrollment(courseId, btn){
         name,
         email: (f && emailField) ? cellText(f[emailField]) : '',
         phone: (f && phoneField) ? cellText(f[phoneField]) : '',
-        client,
+        client: (f && clientField && cellText(f[clientField])) ? cellText(f[clientField]) : courseClient,
       });
     };
     markedById.forEach(spId => pushRow(byId.get(spId), null));
@@ -2776,6 +2787,7 @@ async function ensureStudentFieldMap(sampleRows){
     // these) — used when a student has no matching Courses-list row.
     start:  await resolveStudentsColumn(['Start Date','StartDate','Course Start','Class Start','Class Start Date','Begin Date'], rows, isStartDateValue),
     end:    await resolveStudentsColumn(['End Date','EndDate','Course End','Class End','Class End Date','Finish Date'], rows, isEndDateValue),
+    client: await resolveStudentsColumn(['Client','Customer','Partner','Organization','Company','Account'], rows, isClientValue),
   };
   return _studentFieldMap;
 }
@@ -3548,7 +3560,8 @@ async function downloadMasterStudentList(btn){
         status: map.status ? cellText(f[map.status]) : '',
         klass: codes.join(', '),
         courseType,
-        client: myCourses.length ? (fieldVal(myCourses[0].fields, 'Partner') || '') : '',
+        client: (map.client && cellText(f[map.client])) ? cellText(f[map.client])
+                 : (myCourses.length ? (fieldVal(myCourses[0].fields, 'Partner') || '') : ''),
         startD, endD,
       };
     }).sort((a,b) => a.name.localeCompare(b.name));
