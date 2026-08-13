@@ -251,8 +251,21 @@ button { cursor:pointer; font-family:inherit; }
 .srch-note { font-size:11.5px; color:var(--gray-500); margin-top:10px; line-height:1.5; }
 @media (max-width:640px) { .srch-meta-grid { grid-template-columns:1fr; } }
 
-/* ── COURSE CALENDAR ── */
-.cal-bar-card { padding:14px 20px; }
+/* ── COURSE ACTIONS POPUP ── */
+.course-link { background:none; border:none; padding:0; font-family:inherit; font-size:inherit; font-weight:600; color:var(--blue); cursor:pointer; text-decoration:none; }
+.course-link:hover { text-decoration:underline; color:#4db8ff; }
+.ca-modal { max-width:440px; }
+.ca-head-text { display:flex; flex-direction:column; gap:2px; }
+.ca-title { font-family:'Playfair Display',serif; font-size:20px; color:var(--gray-900); }
+.ca-sub { font-size:12.5px; color:var(--gray-500); }
+.ca-actions { display:flex; flex-direction:column; gap:10px; margin-top:6px; }
+.ca-btn { display:flex; align-items:center; gap:12px; width:100%; text-align:left; padding:14px 16px; border-radius:10px; border:0.5px solid var(--card-border); background:rgba(0,60,180,0.1); color:var(--gray-900); font-family:inherit; font-size:14px; font-weight:600; cursor:pointer; text-decoration:none; transition:background 0.15s, border-color 0.15s; }
+.ca-btn:hover { background:rgba(0,120,255,0.18); border-color:rgba(0,180,255,0.5); }
+.ca-btn .ca-ico { font-size:18px; width:24px; text-align:center; flex-shrink:0; }
+.ca-btn .ca-lbl { display:flex; flex-direction:column; gap:1px; }
+.ca-btn .ca-lbl small { font-size:11px; font-weight:400; color:var(--gray-500); }
+
+/* ── COURSE CALENDAR ── */.cal-bar-card { padding:14px 20px; }
 .cal-bar-inner { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
 .cal-bar-title { font-weight:600; color:var(--gray-900); font-size:14px; }
 .cal-bar-sub { color:var(--gray-500); font-size:12.5px; margin-left:10px; }
@@ -523,6 +536,19 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
     </div>
     <div class="cal-weeks" id="cal-weeks"></div>
     <div class="cal-legend" id="cal-legend"></div>
+  </div>
+</div>
+
+<div class="cal-modal-overlay" id="course-modal" onclick="if(event.target===this)closeCourseActions()">
+  <div class="cal-modal ca-modal">
+    <div class="cal-modal-head">
+      <div class="ca-head-text">
+        <div class="ca-title" id="ca-title">Course</div>
+        <div class="ca-sub" id="ca-sub"></div>
+      </div>
+      <button class="cal-close" onclick="closeCourseActions()" aria-label="Close">✕</button>
+    </div>
+    <div class="ca-actions" id="ca-actions"></div>
   </div>
 </div>
 
@@ -1192,15 +1218,15 @@ function instructorLabel(fields){
   if (names.length === 2) return `${names[0]} & ${names[1]}`;
   return `${names.slice(0,-1).join(', ')} & ${names[names.length-1]}`;
 }
-function trainingRecordsUrl(courseTitle){
+function trainingRecordsUrl(courseTitle, subfolder){
   if (!courseTitle) return null;
-  const idParam = encodeURIComponent(`${CONFIG.sitePath}/Training Records/${courseTitle}`);
+  // Optional subfolder (e.g. "Certificates", "Transcripts") deep-links inside the
+  // class's Training Records folder. viewid/viewpath are intentionally omitted so
+  // the folder opens in the default (public) view for every member — a saved-view
+  // GUID is often personal and fails with "can't open file" for everyone else.
+  const folderPath = `${CONFIG.sitePath}/Training Records/${courseTitle}${subfolder ? '/' + subfolder : ''}`;
+  const idParam = encodeURIComponent(folderPath);
   const newTargetListUrl = encodeURIComponent(`${CONFIG.sitePath}/Training Records`);
-  // Deep-link to the class folder using only the folder path (id=). We deliberately
-  // omit viewid/viewpath: a saved-view GUID is often a PERSONAL view that only its
-  // creator can open, which made this link fail with "can't open file" for every
-  // other instructor. Without it, SharePoint uses the library's default (public)
-  // view, which all site members can access.
   return `https://${CONFIG.siteHostname}${CONFIG.sitePath}/Training%20Records/Forms/AllItems.aspx?id=${idParam}&newTargetListUrl=${newTargetListUrl}`;
 }
 function formatDateShort(d){
@@ -3025,6 +3051,45 @@ function calColorForCourse(fields){
   return CAL_DEFAULT_COLOR;
 }
 
+// ── COURSE ACTIONS POPUP ───────────────────────────────────────────
+// Clicking a course number on the Home "Upcoming classes" table opens a popup
+// with four actions for that course: its Attendance Portal, the Certificates and
+// Transcripts folders in Training Records, and the Enrollment (invoicing) export.
+const ATTENDANCE_PORTAL_URL = 'https://psi-pm.github.io/Attendance-Portal/';
+
+function openCourseActions(courseId){
+  const course = state.courses.find(c => c.id === courseId);
+  if (!course){ showToast('Course not found — try refreshing.', 'error'); return; }
+  const f = course.fields || {};
+  const title = String(f.Title || '').trim() || '(untitled)';
+  const type = fieldVal(f, 'CourseType') || '';
+  const partner = fieldVal(f, 'Partner') || '';
+
+  document.getElementById('ca-title').textContent = title;
+  document.getElementById('ca-sub').textContent = [type, partner].filter(Boolean).join(' · ');
+
+  const certUrl = trainingRecordsUrl(title, 'Certificates');
+  const transUrl = trainingRecordsUrl(title, 'Transcripts');
+
+  const linkBtn = (icon, label, sub, href) =>
+    `<a class="ca-btn" href="${href}" target="_blank" rel="noopener">
+       <span class="ca-ico">${icon}</span>
+       <span class="ca-lbl">${escHtml(label)}<small>${escHtml(sub)}</small></span>
+     </a>`;
+
+  document.getElementById('ca-actions').innerHTML =
+    linkBtn('✅', 'Attendance Portal', 'Mark or review attendance', ATTENDANCE_PORTAL_URL + '?course=' + encodeURIComponent(title))
+    + linkBtn('📜', 'Certificates', 'Open this class\u2019s certificates folder', certUrl)
+    + linkBtn('📄', 'Transcripts', 'Open this class\u2019s transcripts folder', transUrl)
+    + `<button class="ca-btn" onclick="downloadEnrollment('${courseId}', this)">
+         <span class="ca-ico">📊</span>
+         <span class="ca-lbl">Enrollment<small>Download the class invoicing roster</small></span>
+       </button>`;
+
+  document.getElementById('course-modal').classList.add('open');
+}
+function closeCourseActions(){ document.getElementById('course-modal').classList.remove('open'); }
+
 function openCourseCalendar(){
   const now = new Date();
   if (_calState.year == null){ _calState.year = now.getFullYear(); _calState.month = now.getMonth(); }
@@ -3571,7 +3636,7 @@ function renderUpcomingClasses(){
     const count = activeStudentCountForCourse(c);
     return `
       <tr>
-        <td class="course">${courseNum}</td>
+        <td class="course"><button class="course-link" onclick="openCourseActions('${c.id}')" title="Open course actions">${escHtml(courseNum)}</button></td>
         <td>${courseType}</td>
         <td>${partner || '—'}</td>
         <td>${start}</td>
