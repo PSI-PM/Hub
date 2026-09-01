@@ -332,6 +332,19 @@ button { cursor:pointer; font-family:inherit; }
 .stu-cancel:hover { color:var(--gray-900); }
 @media (max-width:640px) { .stu-edit-grid { grid-template-columns:1fr; } }
 
+/* ── TRAINING RECORDS SNAPSHOT (student card) ── */
+.stu-docs { border-top:0.5px solid rgba(0,140,255,0.15); margin-top:12px; padding-top:12px; }
+.docs-head { font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--gray-500); margin-bottom:8px; }
+.docs-loading { font-size:12.5px; color:var(--gray-500); padding:4px 0; }
+.doc-line { display:flex; align-items:center; gap:9px; font-size:13px; padding:4px 0; }
+.doc-ico { width:16px; text-align:center; font-weight:700; flex-shrink:0; }
+.doc-ok { color:var(--gray-900); } .doc-ok .doc-ico { color:var(--green); }
+.doc-na { color:var(--gray-500); } .doc-na .doc-ico { color:var(--gray-500); }
+.doc-missing { color:var(--yellow); } .doc-missing .doc-ico { color:var(--yellow); }
+.doc-why { font-size:11.5px; opacity:0.9; }
+.docs-foot { font-size:11px; color:var(--gray-500); margin-top:8px; }
+.docs-none { font-size:12.5px; color:var(--gray-500); line-height:1.5; }
+
 /* ── CLASS INVOICING ROWS ── */
 .invc-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:13px 16px; background:rgba(0,60,180,0.08); border:0.5px solid var(--card-border); border-radius:12px; margin-bottom:10px; }
 .invc-info .invc-title { font-family:"Playfair Display",serif; font-size:15px; color:var(--gray-900); }
@@ -1234,6 +1247,11 @@ function trainingRecordsUrl(courseTitle, subfolder){
 }
 function formatDateShort(d){
   return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+}
+// Like formatDateShort but keeps the year. Lookup cards surface historical
+// classes going back several years, where "Jun 3" alone is ambiguous.
+function formatDateWithYear(d){
+  return d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
 }
 function formatDateLong(d){
   return d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
@@ -2933,6 +2951,148 @@ async function renderOpsSearch(){
   box.innerHTML = html;
 }
 
+// ── TRAINING RECORDS SNAPSHOT ──────────────────────────────────────
+// Shows, per student, whether their Transcript / Audit form / Certificate
+// actually exist in Training Records — and, when one is absent, whether that's
+// correct or a real gap.
+//
+// Three states, because a blank box is ambiguous:
+//   present      — the file is in the folder
+//   not expected — the pipeline deliberately suppresses it (withdrawn student,
+//                  zero attendance, study-group course type). Not a problem.
+//   missing      — it should be there and isn't. Worth chasing.
+//
+// Folder listings are cached PER COURSE, not per student, so opening this for a
+// 25-person roster costs three Graph calls total rather than 75.
+
+// Mirrors sanitize_filename_component() in generate_transcripts.py exactly.
+// If that Python function ever changes, this must change with it or every
+// document will read as missing.
+function docSafeName(name){
+  return String(name == null ? '' : name)
+    .replace(/["\:<>|*?\r\n]/g, '')
+    .trim()
+    .replace(/ /g, '_')
+    .replace(/,/g, '');
+}
+
+const DOC_KINDS = [
+  { key:'transcript',  label:'Transcript',  folder:'Transcripts',  suffix:'_transcript.pdf' },
+  { key:'audit',       label:'Audit form',  folder:'Audit Forms',  suffix:'_audit.pdf' },
+  { key:'certificate', label:'Certificate', folder:'Certificates', suffix:'_certificate.pdf' },
+];
+
+// courseCode|folder -> array of filenames, or null when the folder doesn't exist
+const _docFolderCache = {};
+async function listTrainingRecordFiles(courseCode, folder){
+  const cacheKey = `${courseCode}|${folder}`;
+  if (_docFolderCache[cacheKey] !== undefined) return _docFolderCache[cacheKey];
+  const path = `${courseCode}/${folder}`;
+  const encoded = path.split('/').map(encodeURIComponent).join('/');
+  try {
+    const res = await graphGet(
+      `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.trainingRecordsListId}/drive/root:/${encoded}:/children?$select=name`
+    );
+    _docFolderCache[cacheKey] = (res.value || []).map(x => String(x.name || ''));
+  } catch(e){
+    // A missing folder is the normal case for legacy classes and for classes
+    // whose documents were never generated — not an error worth surfacing.
+    _docFolderCache[cacheKey] = null;
+  }
+  return _docFolderCache[cacheKey];
+}
+
+// Tolerant match: any file in the right folder whose name contains the
+// student's sanitized name and ends with the right suffix. Deliberately not an
+// exact filename match — a hand-renamed or manually uploaded file should still
+// count as present. A false green here is cheaper than a false alarm.
+function findDoc(files, safeName, suffix){
+  if (!files || !safeName) return null;
+  const needle = safeName.toLowerCase();
+  const suf = suffix.toLowerCase();
+  return files.find(n => {
+    const low = n.toLowerCase();
+    return low.includes(needle) && low.endsWith(suf);
+  }) || null;
+}
+
+// Why a document might legitimately not exist for this student.
+// Returns { transcript, audit, certificate } — each null (expected) or a reason.
+function docExpectations(f, map, courseType){
+  const status = map.status ? cellText(f[map.status]) : '';
+  const hoursRaw = f.TotalHours;
+  const hours = (hoursRaw === '' || hoursRaw == null) ? null : Number(hoursRaw);
+  const isStudyGroup = /study\s*group/i.test(String(courseType || ''));
+
+  // Known zero attendance: the student never started, so nothing is issued.
+  if (hours != null && !isNaN(hours) && hours <= 0){
+    return { transcript:'no attendance', audit:'no attendance', certificate:'no attendance' };
+  }
+  const out = { transcript:null, audit:null, certificate:null };
+  // Study group is certificate-only — no transcript template exists for it.
+  if (isStudyGroup){ out.transcript = 'study group'; out.audit = 'study group'; }
+  // Withdrawn students keep their transcript; cert and audit are suppressed.
+  if (status === 'Withdrawn'){ out.audit = 'withdrawn'; out.certificate = 'withdrawn'; }
+  return out;
+}
+
+async function checkStudentDocuments(studentId, key, courseCode){
+  const panel = document.getElementById(`stu-docs-${key}`);
+  if (!panel) return;
+  if (panel.style.display !== 'none' && panel.dataset.loaded){
+    panel.style.display = 'none'; return;
+  }
+  panel.style.display = 'block';
+  panel.innerHTML = `<div class="docs-loading">Checking Training Records…</div>`;
+
+  const student = state.students.find(x => x.id === studentId);
+  if (!student){ panel.innerHTML = `<div class="error-state">Student not found.</div>`; return; }
+  const f = student.fields || {};
+  let map; try { map = await ensureStudentFieldMap(); } catch(e){ map = {}; }
+
+  const course = state.courses.find(c => String(c.fields.Title||'').trim().toLowerCase()
+    === String(courseCode||'').trim().toLowerCase());
+  const courseType = cellText(f.CourseType)
+    || (course ? fieldVal(course.fields, 'CourseType') : '') || '';
+
+  const listings = {};
+  for (const kind of DOC_KINDS){
+    listings[kind.key] = await listTrainingRecordFiles(courseCode, kind.folder);
+  }
+
+  // Every folder absent means this class has no Training Records at all — one
+  // honest line beats three false "missing" alarms.
+  if (DOC_KINDS.every(k => listings[k.key] === null)){
+    panel.innerHTML = `<div class="docs-head">Training records</div>
+      <div class="docs-none">No Training Records folder exists for ${escHtml(courseCode)} — documents were never generated for this class.</div>`;
+    panel.dataset.loaded = '1';
+    return;
+  }
+
+  const expect = docExpectations(f, map, courseType);
+  const safeName = docSafeName(f.Title);
+
+  const rows = DOC_KINDS.map(kind => {
+    const hit = findDoc(listings[kind.key], safeName, kind.suffix);
+    if (hit){
+      return `<div class="doc-line doc-ok"><span class="doc-ico">✓</span>${kind.label}</div>`;
+    }
+    const reason = expect[kind.key];
+    if (reason){
+      return `<div class="doc-line doc-na"><span class="doc-ico">–</span>${kind.label} <span class="doc-why">— not expected, ${escHtml(reason)}</span></div>`;
+    }
+    return `<div class="doc-line doc-missing"><span class="doc-ico">!</span>${kind.label} <span class="doc-why">— missing</span></div>`;
+  }).join('');
+
+  const hoursRaw = f.TotalHours;
+  const hoursNote = (hoursRaw === '' || hoursRaw == null)
+    ? `<div class="docs-foot">No total hours recorded — this class may predate hour tracking.</div>`
+    : `<div class="docs-foot">${escHtml(String(hoursRaw))} hours recorded.</div>`;
+
+  panel.innerHTML = `<div class="docs-head">Training records — ${escHtml(courseCode)}</div>${rows}${hoursNote}`;
+  panel.dataset.loaded = '1';
+}
+
 function renderStudentCard(s, map){
   const f = s.fields;
   const name = f.Title || '(no name on record)';
@@ -2954,7 +3114,27 @@ function renderStudentCard(s, map){
   pushCode(cellText(f.LegacyCourseCode));
   pushCode(fieldVal(f, 'Course'));
 
-  const client = myCourses.length ? (fieldVal(myCourses[0].fields, 'Partner') || '') : '';
+  // Client: the student's OWN Client column is the authority — completed and
+  // legacy students often have no matching Courses row, which is why this cell
+  // used to come back blank on their cards. A matched course's Partner only
+  // fills the gap. Same order the Master List export uses.
+  const cf = myCourses.length ? myCourses[0].fields : null;
+  const client =
+    (map.client && cellText(f[map.client])) ? cellText(f[map.client])
+    : (cf ? (fieldVal(cf, 'Partner') || '') : '');
+
+  // Class dates, read the same way: student record first, matched course as
+  // fallback. parseDateOnly avoids the UTC-midnight off-by-one.
+  const startD =
+    (map.start ? parseDateOnly(cellText(f[map.start])) : null) ||
+    (cf && cf.StartDate ? parseDateOnly(cf.StartDate) : null);
+  const endD =
+    (map.end ? parseDateOnly(cellText(f[map.end])) : null) ||
+    (cf && cf.EndDate ? parseDateOnly(cf.EndDate) : null);
+  const dateLabel = (startD || endD)
+    ? [startD ? formatDateWithYear(startD) : '?', endD ? formatDateWithYear(endD) : '?'].join(' – ')
+    : '';
+
   const classLabel = classCodes.join(', ');
 
   const cell = (k, v) => v ? `<div class="srch-cell"><div class="srch-ck">${k}</div><div class="srch-cv">${v}</div></div>` : '';
@@ -2969,6 +3149,9 @@ function renderStudentCard(s, map){
   }).filter(Boolean);
   if (email) buttons.push(`<a class="srch-btn alt" href="mailto:${escHtml(email)}">Email student</a>`);
   buttons.push(`<button class="srch-btn edit" onclick="openStudentEditor('${s.id}')">✎ Edit information</button>`);
+  if (classCodes.length){
+    buttons.push(`<button class="srch-btn edit" onclick="checkStudentDocuments('${s.id}','${s.id}','${escHtml(classCodes[0]).replace(/'/g,"\\'")}')">📄 Documents</button>`);
+  }
 
   const note = !classCodes.length
     ? `<div class="srch-note">No class on this student's record, so training records can't be linked automatically.</div>`
@@ -2982,10 +3165,12 @@ function renderStudentCard(s, map){
           ${cell('Email', email ? `<a href="mailto:${escHtml(email)}">${escHtml(email)}</a>` : '')}
           ${cell('Phone', phone ? `<a href="tel:${escHtml(phone.replace(/[^\d+]/g,''))}">${escHtml(phone)}</a>` : '')}
           ${cell('Class', escHtml(classLabel))}
+          ${cell('Class dates', escHtml(dateLabel))}
           ${cell('Client', escHtml(client))}
         </div>
         ${buttons.length ? `<div class="srch-actions">${buttons.join('')}</div>` : ''}
         ${note}
+        <div class="stu-docs" id="stu-docs-${s.id}" style="display:none;"></div>
         <div class="stu-edit" id="stu-edit-${s.id}" style="display:none;"></div>
       </div>
     </div>`;
