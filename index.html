@@ -950,6 +950,19 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
         </div>
       </div>
 
+      <!-- SC WORKS — PMI MEMBERSHIP & EXAM -->
+      <div class="card" style="margin-bottom:18px;">
+        <h2>SC Works — PMI membership &amp; exam <span class="badge" id="pmi-count"></span></h2>
+        <p style="font-size:12.5px;color:var(--gray-500);margin-bottom:14px;">Every SC Works student with an outstanding step. The order is PMI application approved, then invoiced to the SC Works client, then membership and exam purchased. Rows drop off this list once all three are recorded. Use the arrow on any row to set a specific date, correct a mistake, or add a note.</p>
+        <div class="pmi-filters" id="pmi-filters"></div>
+        <div id="pmi-list">
+          <div class="loading-state">
+            <div class="skeleton-line" style="width:100%"></div>
+            <div class="skeleton-line" style="width:85%"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- CONTRACTS & MOUS -->
       <div class="card pending" style="margin-bottom:18px;">
         <h2>Contracts &amp; MOUs <span class="pending-tag">⏳ Pending</span></h2>
@@ -964,19 +977,6 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
         <p style="font-size:12.5px;color:var(--gray-500);margin-bottom:14px;">Per-customer invoicing rules: when to invoice, who to send it to, and payment terms.</p>
         <input type="text" id="invoice-search" placeholder="Search customers…" oninput="renderInvoiceContacts()" style="width:100%;padding:9px 12px;border-radius:8px;border:1.5px solid var(--card-border);background:rgba(0,40,120,0.1);color:var(--gray-900);font-size:13px;outline:none;margin-bottom:14px;">
         <div id="invoice-contacts-list">
-          <div class="loading-state">
-            <div class="skeleton-line" style="width:100%"></div>
-            <div class="skeleton-line" style="width:85%"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- SC WORKS — PMI MEMBERSHIP & EXAM -->
-      <div class="card" style="margin-bottom:18px;">
-        <h2>SC Works — PMI membership &amp; exam <span class="badge" id="pmi-count"></span></h2>
-        <p style="font-size:12.5px;color:var(--gray-500);margin-bottom:14px;">Every SC Works student with an outstanding step. The order is PMI application approved, then invoiced to the SC Works client, then membership and exam purchased. Rows drop off this list once all three are recorded. Use the arrow on any row to set a specific date, correct a mistake, or add a note.</p>
-        <div class="pmi-filters" id="pmi-filters"></div>
-        <div id="pmi-list">
           <div class="loading-state">
             <div class="skeleton-line" style="width:100%"></div>
             <div class="skeleton-line" style="width:85%"></div>
