@@ -353,6 +353,22 @@ button { cursor:pointer; font-family:inherit; }
 .invc-btn:hover { opacity:0.9; }
 .invc-btn:disabled { opacity:0.5; cursor:not-allowed; }
 
+/* ── SC WORKS PMI TRACKING ── */
+.pmi-filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+.pmi-group-label { font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--gray-500); margin:16px 0 8px; }
+.pmi-group-label:first-child { margin-top:0; }
+.pmi-row { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:12px 16px; background:rgba(0,60,180,0.08); border:0.5px solid var(--card-border); border-radius:12px; margin-bottom:8px; }
+.pmi-row-flag { border-color:rgba(220,150,30,0.5); }
+.pmi-main { flex:1; min-width:180px; }
+.pmi-name { font-size:14px; font-weight:600; color:var(--gray-900); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.pmi-sub { font-size:12px; color:var(--gray-500); margin-top:3px; }
+.pmi-sub-flag { color:var(--yellow); }
+.pmi-actions { display:flex; gap:8px; flex-shrink:0; }
+.pill.pmi-flag { background:var(--yellow-light); color:var(--yellow); }
+.pmi-edit { flex-basis:100%; }
+.pmi-edit-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px 14px; border-top:0.5px solid rgba(0,140,255,0.15); margin-top:12px; padding-top:12px; }
+@media (max-width:640px){ .pmi-edit-grid { grid-template-columns:1fr; } }
+
 /* ── VENDOR EXPENSES ── */
 .exp-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:14px; }
 .exp-stat { background:rgba(0,40,120,0.1); border:0.5px solid rgba(0,140,255,0.15); border-radius:10px; padding:12px 14px; }
@@ -948,6 +964,19 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
         <p style="font-size:12.5px;color:var(--gray-500);margin-bottom:14px;">Per-customer invoicing rules: when to invoice, who to send it to, and payment terms.</p>
         <input type="text" id="invoice-search" placeholder="Search customers…" oninput="renderInvoiceContacts()" style="width:100%;padding:9px 12px;border-radius:8px;border:1.5px solid var(--card-border);background:rgba(0,40,120,0.1);color:var(--gray-900);font-size:13px;outline:none;margin-bottom:14px;">
         <div id="invoice-contacts-list">
+          <div class="loading-state">
+            <div class="skeleton-line" style="width:100%"></div>
+            <div class="skeleton-line" style="width:85%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SC WORKS — PMI MEMBERSHIP & EXAM -->
+      <div class="card" style="margin-bottom:18px;">
+        <h2>SC Works — PMI membership &amp; exam <span class="badge" id="pmi-count"></span></h2>
+        <p style="font-size:12.5px;color:var(--gray-500);margin-bottom:14px;">Every SC Works student with an outstanding step. The order is PMI application approved, then invoiced to the SC Works client, then membership and exam purchased. Rows drop off this list once all three are recorded. Use the arrow on any row to set a specific date, correct a mistake, or add a note.</p>
+        <div class="pmi-filters" id="pmi-filters"></div>
+        <div id="pmi-list">
           <div class="loading-state">
             <div class="skeleton-line" style="width:100%"></div>
             <div class="skeleton-line" style="width:85%"></div>
@@ -1840,6 +1869,7 @@ function switchTab(tabName){
     populateSingleCourseDropdown();
     populateClientDropdown();
     loadInvoiceContacts();
+    renderPmiTracking();
     renderInvoicingClasses();
     initOpsSearch();
     renderVendorExpenses();
@@ -2237,6 +2267,301 @@ async function downloadEnrollment(courseId, btn){
     showLoading(false);
     if (btn){ btn.disabled = false; btn.textContent = originalLabel || 'Enrollment'; }
   }
+}
+
+// ── SC WORKS: PMI MEMBERSHIP & EXAM TRACKING ───────────────────────
+// A worklist, not a report. Three sequential stages, each a DATE on the
+// student's SharePoint record:
+//   1. PMI application approved   (Wanda waits on PMI)
+//   2. Invoiced                   (Amber bills the SC Works client)
+//   3. Membership & exam purchased (Wanda spends, one purchase covers both)
+//
+// Dates rather than yes/no flags: "when did this happen" is the question that
+// eventually gets asked, and a checkbox can't answer it.
+//
+// Columns are resolved at runtime by display name, the same way announcements
+// and student columns are, so no GUIDs need configuring — create the columns in
+// SharePoint and this card finds them on the next sign-in.
+const PMI_COLUMN_CANDIDATES = {
+  approved:  ['PMI Application Approved','PMI Approved','Application Approved','PMI Application'],
+  invoiced:  ['PMI Invoiced','Invoiced','PMI Invoice Date'],
+  purchased: ['PMI Purchased','Purchased','PMI Purchase Date','Membership Purchased'],
+  notes:     ['PMI Notes','PMI Note','Benefit Notes'],
+};
+
+let _pmiCols = null;
+async function resolvePmiColumns(){
+  if (_pmiCols) return _pmiCols;
+  let all = [];
+  try {
+    const cols = await graphGet(
+      `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.studentsListId}/columns`
+    );
+    all = cols.value || [];
+  } catch(e){ console.warn('PMI column lookup failed:', e.message); }
+  const find = (cands) => {
+    const want = cands.map(c => c.toLowerCase());
+    const hit = all.find(c =>
+      want.includes((c.displayName || '').trim().toLowerCase()) ||
+      want.includes((c.name || '').trim().toLowerCase()));
+    return hit ? hit.name : null;
+  };
+  _pmiCols = {
+    approved:  find(PMI_COLUMN_CANDIDATES.approved),
+    invoiced:  find(PMI_COLUMN_CANDIDATES.invoiced),
+    purchased: find(PMI_COLUMN_CANDIDATES.purchased),
+    notes:     find(PMI_COLUMN_CANDIDATES.notes),
+  };
+  return _pmiCols;
+}
+
+// SC Works students are identified by the Client column on their own record —
+// they attend open-enrollment classes hosted by colleges, so the CLASS never
+// identifies them. Matches any location: "SC Works Trident", "SCWorks Pee Dee".
+function isScWorksClient(v){
+  return /sc\s*works/i.test(String(v == null ? '' : v));
+}
+
+let pmiFilter = 'all';
+function setPmiFilter(v){ pmiFilter = v; renderPmiTracking(); }
+
+// Which stage is this student waiting on? Order matters: a purchase recorded
+// with no invoice is an unbilled purchase, which must stay visible rather than
+// counting as complete and silently disappearing.
+function pmiStage(f, cols){
+  const d = k => (cols[k] ? String(cellText(f[cols[k]]) || '').slice(0,10) : '');
+  const approved = d('approved'), invoiced = d('invoiced'), purchased = d('purchased');
+  if (purchased && !invoiced) return { key:'flagged', approved, invoiced, purchased };
+  if (approved && invoiced && purchased) return { key:'done', approved, invoiced, purchased };
+  if (invoiced) return { key:'purchase', approved, invoiced, purchased };
+  if (approved) return { key:'invoice', approved, invoiced, purchased };
+  return { key:'approval', approved, invoiced, purchased };
+}
+
+const PMI_STAGE_LABEL = {
+  approval: 'Awaiting PMI',
+  invoice:  'Needs invoice',
+  purchase: 'Needs purchase',
+  flagged:  'Flagged',
+};
+const PMI_NEXT_ACTION = {
+  approval: { col:'approved',  label:'Mark approved'  },
+  invoice:  { col:'invoiced',  label:'Mark invoiced'  },
+  purchase: { col:'purchased', label:'Mark purchased' },
+  flagged:  { col:'invoiced',  label:'Mark invoiced'  },
+};
+
+function pmiDateLabel(iso){
+  const d = parseDateOnly(iso);
+  return d ? formatDateShort(d) : '';
+}
+
+async function renderPmiTracking(){
+  const listEl = document.getElementById('pmi-list');
+  const filtEl = document.getElementById('pmi-filters');
+  const cntEl  = document.getElementById('pmi-count');
+  if (!listEl) return;
+
+  let cols;
+  try { cols = await resolvePmiColumns(); } catch(e){ cols = {}; }
+
+  if (!cols.approved && !cols.invoiced && !cols.purchased){
+    if (filtEl) filtEl.innerHTML = '';
+    if (cntEl) cntEl.textContent = 'Setup needed';
+    listEl.innerHTML = `<div class="empty-state" style="text-align:left;padding:14px;border:0.5px dashed var(--card-border);border-radius:10px;">
+      To turn this on, add four columns to the SharePoint <strong style="color:var(--gray-700)">Students</strong> list:
+      <strong style="color:var(--gray-700)">PMI Application Approved</strong>,
+      <strong style="color:var(--gray-700)">PMI Invoiced</strong> and
+      <strong style="color:var(--gray-700)">PMI Purchased</strong> (all Date and time, date only), plus
+      <strong style="color:var(--gray-700)">PMI Notes</strong> (single line of text).
+      This card finds them automatically on the next sign-in.</div>`;
+    return;
+  }
+
+  let map; try { map = await ensureStudentFieldMap(); } catch(e){ map = {}; }
+
+  const rows = state.students.filter(s => {
+    const f = s.fields || {};
+    const client = map.client ? cellText(f[map.client]) : '';
+    return isScWorksClient(client);
+  }).map(s => {
+    const f = s.fields || {};
+    const stage = pmiStage(f, cols);
+    const codes = [];
+    const push = v => { const t = String(v==null?'':v).trim();
+      if (t && !codes.some(x => x.toLowerCase()===t.toLowerCase())) codes.push(t); };
+    coursesForStudent(s).forEach(c => push(c.fields.Title));
+    push(cellText(f.LegacyCourseCode));
+    push(fieldVal(f, 'Course'));
+    return {
+      s, f, stage,
+      name: cellText(f.Title) || '(no name)',
+      client: map.client ? cellText(f[map.client]) : '',
+      klass: codes[0] || '',
+      notes: cols.notes ? cellText(f[cols.notes]) : '',
+    };
+  }).filter(r => r.stage.key !== 'done');
+
+  const counts = { all: rows.length, approval:0, invoice:0, purchase:0, flagged:0 };
+  rows.forEach(r => { counts[r.stage.key]++; });
+
+  if (cntEl) cntEl.textContent = rows.length ? `${rows.length} outstanding` : 'All clear';
+
+  if (filtEl){
+    const chip = (k, label) => {
+      const n = counts[k] || 0;
+      if (k !== 'all' && !n) return '';
+      return `<button class="chip${pmiFilter===k?' on':''}" onclick="setPmiFilter('${k}')">${label} ${n}</button>`;
+    };
+    filtEl.innerHTML = [
+      chip('all','All'), chip('approval','Awaiting PMI'), chip('invoice','Needs invoice'),
+      chip('purchase','Needs purchase'), chip('flagged','Flagged'),
+    ].filter(Boolean).join('');
+  }
+
+  if (!rows.length){
+    listEl.innerHTML = `<div class="empty-state">Nothing outstanding — every SC Works student is approved, invoiced, and purchased.</div>`;
+    return;
+  }
+
+  let shown = rows;
+  if (pmiFilter !== 'all') shown = rows.filter(r => r.stage.key === pmiFilter);
+  if (!shown.length){
+    listEl.innerHTML = `<div class="empty-state">Nothing in this group right now.</div>`;
+    return;
+  }
+
+  // Group by class, then client, so a batch of students from one class sits together
+  const groups = {};
+  shown.forEach(r => {
+    const g = `${r.klass || 'No class on record'}${r.client ? ' · ' + r.client : ''}`;
+    (groups[g] = groups[g] || []).push(r);
+  });
+
+  listEl.innerHTML = Object.keys(groups).sort().map(g => {
+    const items = groups[g].sort((a,b) => a.name.localeCompare(b.name)).map(r => {
+      const st = r.stage;
+      const act = PMI_NEXT_ACTION[st.key];
+      const flagged = st.key === 'flagged';
+      const bits = [];
+      if (st.approved) bits.push('Approved ' + pmiDateLabel(st.approved));
+      if (st.invoiced) bits.push('invoiced ' + pmiDateLabel(st.invoiced));
+      if (st.purchased) bits.push('purchased ' + pmiDateLabel(st.purchased));
+      let sub = flagged
+        ? `Purchased ${pmiDateLabel(st.purchased)} but never invoiced`
+        : (bits.length ? bits.join(' · ') + ' · ' + (
+            st.key==='invoice' ? 'not yet invoiced' :
+            st.key==='purchase' ? 'not yet purchased' : '')
+          : 'Waiting on PMI approval');
+      const badge = flagged ? ` <span class="pill pmi-flag">Check this</span>` : '';
+      return `
+        <div class="pmi-row${flagged?' pmi-row-flag':''}">
+          <div class="pmi-main">
+            <div class="pmi-name">${escHtml(r.name)}${badge}</div>
+            <div class="pmi-sub${flagged?' pmi-sub-flag':''}">${escHtml(sub)}</div>
+          </div>
+          <div class="pmi-actions">
+            <button class="srch-btn edit sm" onclick="pmiStamp('${r.s.id}','${act.col}')">${act.label}</button>
+            <button class="srch-btn edit sm" title="Edit dates and notes" onclick="pmiToggleEdit('${r.s.id}')">⌄</button>
+          </div>
+          <div class="pmi-edit" id="pmi-edit-${r.s.id}" style="display:none;"></div>
+        </div>`;
+    }).join('');
+    return `<div class="pmi-group-label">${escHtml(g)}</div>${items}`;
+  }).join('');
+}
+
+// One-click stamp of today's date onto the next stage. Deliberately no
+// confirmation dialog — everything here is reversible from the expander, and
+// confirmations on routine actions get clicked through without reading.
+async function pmiStamp(studentId, colKey){
+  const student = state.students.find(s => s.id === studentId);
+  const cols = await resolvePmiColumns();
+  if (!student || !cols[colKey]){ showToast('Could not find that column in SharePoint.', 'error'); return; }
+  const today = todayDateOnly();
+  const iso = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  showLoading(true);
+  try {
+    await graphPatch(
+      `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.studentsListId}/items/${student.fields.id}/fields`,
+      { [cols[colKey]]: iso }
+    );
+    student.fields[cols[colKey]] = iso;
+    showToast('Recorded ✓', 'success');
+    renderPmiTracking();
+  } catch(e){
+    const msg = /accessDenied|Access denied/i.test(e.message)
+      ? 'Access denied — your account needs write permission to the Students list.'
+      : 'Save failed: ' + e.message;
+    showToast(msg, 'error');
+  }
+  showLoading(false);
+}
+
+// The expander: set a specific date (Wanda buying Friday for a Tuesday
+// approval), clear a stage that was stamped by mistake, or leave a note.
+async function pmiToggleEdit(studentId){
+  const panel = document.getElementById(`pmi-edit-${studentId}`);
+  if (!panel) return;
+  if (panel.style.display !== 'none'){ panel.style.display='none'; panel.innerHTML=''; return; }
+  const student = state.students.find(s => s.id === studentId);
+  const cols = await resolvePmiColumns();
+  if (!student) return;
+  const f = student.fields || {};
+  const val = k => cols[k] ? String(cellText(f[cols[k]]) || '').slice(0,10) : '';
+  panel.style.display = 'block';
+  panel.innerHTML = `
+    <div class="pmi-edit-grid">
+      <div class="stu-field"><label>PMI approved</label><input type="date" id="pmi-a-${studentId}" value="${val('approved')}"></div>
+      <div class="stu-field"><label>Invoiced</label><input type="date" id="pmi-i-${studentId}" value="${val('invoiced')}"></div>
+      <div class="stu-field"><label>Purchased</label><input type="date" id="pmi-p-${studentId}" value="${val('purchased')}"></div>
+      ${cols.notes ? `<div class="stu-field full"><label>Notes</label><input type="text" id="pmi-n-${studentId}" value="${escHtml(cellText(f[cols.notes]))}" placeholder="Anything worth recording"></div>` : ''}
+    </div>
+    <div class="stu-edit-actions">
+      <button class="stu-save" onclick="pmiSaveEdit('${studentId}')">Save</button>
+      <button class="stu-cancel" onclick="pmiToggleEdit('${studentId}')">Cancel</button>
+    </div>`;
+}
+
+async function pmiSaveEdit(studentId){
+  const student = state.students.find(s => s.id === studentId);
+  const cols = await resolvePmiColumns();
+  if (!student) return;
+  const f = student.fields || {};
+  const get = id => { const el = document.getElementById(id); return el ? el.value.trim() : null; };
+  const cur = k => cols[k] ? String(cellText(f[cols[k]]) || '').slice(0,10) : '';
+
+  const changed = {};
+  const pairs = [['approved',`pmi-a-${studentId}`],['invoiced',`pmi-i-${studentId}`],['purchased',`pmi-p-${studentId}`]];
+  pairs.forEach(([k,id]) => {
+    if (!cols[k]) return;
+    const now = get(id);
+    if (now === null) return;
+    // Empty clears the stage — a mis-stamped date has to be removable.
+    if (now !== cur(k)) changed[cols[k]] = now || null;
+  });
+  if (cols.notes){
+    const now = get(`pmi-n-${studentId}`);
+    if (now !== null && now !== String(cellText(f[cols.notes]) || '')) changed[cols.notes] = now;
+  }
+
+  if (!Object.keys(changed).length){ showToast('No changes to save.', 'error'); return; }
+  showLoading(true);
+  try {
+    await graphPatch(
+      `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.studentsListId}/items/${student.fields.id}/fields`,
+      changed
+    );
+    Object.assign(student.fields, changed);
+    showToast('Updated ✓', 'success');
+    renderPmiTracking();
+  } catch(e){
+    const msg = /accessDenied|Access denied/i.test(e.message)
+      ? 'Access denied — your account needs write permission to the Students list.'
+      : 'Save failed: ' + e.message;
+    showToast(msg, 'error');
+  }
+  showLoading(false);
 }
 
 // ── VENDOR EXPENSES (Operations Center) ────────────────────────────
