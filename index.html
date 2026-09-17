@@ -296,7 +296,13 @@ button { cursor:pointer; font-family:inherit; }
 .cal-daynum { grid-row:1; text-align:right; font-size:11px; color:var(--gray-500); padding:3px 6px 2px; z-index:1; }
 .cal-daynum.other { color:rgba(120,150,180,0.4); }
 .cal-daynum.today { color:#fff; font-weight:700; }
-.cal-bar { grid-row:var(--lane); align-self:start; margin:1px 2px; height:17px; border-radius:4px; font-size:10px; font-weight:600; line-height:17px; padding:0 6px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; z-index:2; cursor:default; }
+.cal-bar { grid-row:var(--lane); align-self:start; margin:1px 2px; height:17px; border-radius:4px; font-size:10px; font-weight:600; line-height:17px; padding:0 6px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; z-index:2; cursor:pointer; }
+.cal-bar:hover { filter:brightness(1.15); box-shadow:0 0 0 1.5px rgba(255,255,255,0.65); }
+.ca-info { display:flex; flex-direction:column; gap:2px; margin:4px 0 6px; }
+.ca-info-row { display:flex; gap:12px; padding:6px 0; border-bottom:0.5px solid rgba(0,140,255,0.10); }
+.ca-info-row:last-child { border-bottom:none; }
+.ca-info-k { flex:0 0 108px; font-size:11px; letter-spacing:0.04em; text-transform:uppercase; color:var(--gray-500); padding-top:1px; }
+.ca-info-v { font-size:13px; color:var(--gray-900); line-height:1.45; }
 .cal-bar.cont-l { border-top-left-radius:0; border-bottom-left-radius:0; }
 .cal-bar.cont-r { border-top-right-radius:0; border-bottom-right-radius:0; }
 .cal-legend { display:flex; flex-wrap:wrap; gap:12px; margin-top:14px; padding-top:12px; border-top:0.5px solid rgba(0,140,255,0.12); }
@@ -577,6 +583,7 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
       </div>
       <button class="cal-close" onclick="closeCourseActions()" aria-label="Close">✕</button>
     </div>
+    <div class="ca-info" id="ca-info"></div>
     <div class="ca-actions" id="ca-actions"></div>
   </div>
 </div>
@@ -3582,16 +3589,41 @@ function calColorForCourse(fields){
 // Transcripts folders in Training Records, and the Enrollment (invoicing) export.
 const ATTENDANCE_PORTAL_URL = 'https://psi-pm.github.io/Attendance-Portal/';
 
-function openCourseActions(courseId){
+// showActions=false renders an information-only popup. The calendar uses that:
+// clicking a bar is a "what is this class" gesture, not a "do something to it"
+// one. The Home tab's course-number links pass the default (true) and keep the
+// Attendance / Certificates / Transcripts / Enrollment buttons.
+function openCourseActions(courseId, showActions){
+  if (showActions === undefined) showActions = true;
   const course = state.courses.find(c => c.id === courseId);
   if (!course){ showToast('Course not found — try refreshing.', 'error'); return; }
   const f = course.fields || {};
   const title = String(f.Title || '').trim() || '(untitled)';
   const type = fieldVal(f, 'CourseType') || '';
   const partner = fieldVal(f, 'Partner') || '';
+  const status = fieldVal(f, 'Status') || '';
+  const instructor = instructorLabel(f);
+  const sd = f.StartDate ? parseDateOnly(f.StartDate) : null;
+  const ed = f.EndDate ? parseDateOnly(f.EndDate) : null;
+  const dates = (sd || ed)
+    ? `${sd ? formatDateWithYear(sd) : '?'} – ${ed ? formatDateWithYear(ed) : '?'}`
+    : '';
 
-  document.getElementById('ca-title').textContent = title;
+  document.getElementById('ca-title').innerHTML =
+    escHtml(title) + (status ? ` <span class="pill ${statusPillClass(status)}">${escHtml(status)}</span>` : '');
   document.getElementById('ca-sub').textContent = [type, partner].filter(Boolean).join(' · ');
+
+  // Course facts, shown in both modes. The calendar only ever shows a course
+  // number and instructor on the bar, so this is where the rest lives.
+  const infoRow = (k, v) => v
+    ? `<div class="ca-info-row"><span class="ca-info-k">${k}</span><span class="ca-info-v">${v}</span></div>` : '';
+  document.getElementById('ca-info').innerHTML = [
+    infoRow('Instructor', escHtml(instructor)),
+    infoRow('Course type', escHtml(type)),
+    infoRow('Client', escHtml(partner)),
+    infoRow('Course dates', escHtml(dates)),
+    infoRow('Students', String(activeStudentCountForCourse(course))),
+  ].filter(Boolean).join('');
 
   const certUrl = trainingRecordsUrl(title, 'Certificates');
   const transUrl = trainingRecordsUrl(title, 'Transcripts');
@@ -3602,7 +3634,7 @@ function openCourseActions(courseId){
        <span class="ca-lbl">${escHtml(label)}<small>${escHtml(sub)}</small></span>
      </a>`;
 
-  document.getElementById('ca-actions').innerHTML =
+  document.getElementById('ca-actions').innerHTML = !showActions ? '' :
     linkBtn('✅', 'Attendance Portal', 'Mark or review attendance', ATTENDANCE_PORTAL_URL + '?course=' + encodeURIComponent(title))
     + linkBtn('📜', 'Certificates', 'Open this class\u2019s certificates folder', certUrl)
     + linkBtn('📄', 'Transcripts', 'Open this class\u2019s transcripts folder', transUrl)
@@ -3657,7 +3689,7 @@ function renderCourseCalendar(){
     if (!s) return null;
     if (!e || e < s) e = s;
     const isE = /^e/i.test(String(f.Title || '').trim());
-    return { f, s: startOfDay(s), e: startOfDay(e), isE, title: String(f.Title || '').trim() || '(untitled)' };
+    return { id: c.id, f, s: startOfDay(s), e: startOfDay(e), isE, title: String(f.Title || '').trim() || '(untitled)' };
   }).filter(Boolean);
 
   let html = '';
@@ -3719,7 +3751,10 @@ function renderCourseCalendar(){
       const firsts = names.map(n => n.split(/\s+/)[0]);
       const instr = firsts.length ? firsts.join(' & ') : 'Unassigned';
       const label = `${seg.c.title} · ${instr}`;
-      bars += `<div class="cal-bar" title="${escHtml(seg.c.title + ' — ' + (names.join(', ')||'Unassigned'))}" `
+      // Any segment of a multi-week course opens the popup for the WHOLE course —
+      // segments are a drawing artifact of week boundaries, not separate things.
+      bars += `<div class="cal-bar" onclick="openCourseActions('${seg.c.id}', false)" `
+        + `title="${escHtml(seg.c.title + ' — ' + (names.join(', ')||'Unassigned'))}" `
         + `style="grid-column:${seg.startCol+1} / ${seg.endCol+2};--lane:${seg.lane+2};background:${col.bg};color:${col.fg};">`
         + `${escHtml(label)}</div>`;
     });
