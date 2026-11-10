@@ -948,7 +948,7 @@ table.data-table td.course { font-weight:600; color:var(--gray-900); }
       <!-- CLASS INVOICING -->
       <div class="card" style="margin-bottom:18px; margin-top:18px;">
         <h2>Class Invoicing</h2>
-        <p style="font-size:12.5px;color:var(--gray-500);margin-bottom:14px;">Classes currently in progress. Download an enrollment roster — active students marked in attendance, excluding anyone withdrawn — as an Excel file for invoicing. Updates automatically as classes start and complete.</p>
+        <p style="font-size:12.5px;color:var(--gray-500);margin-bottom:14px;">Classes currently in progress. Download an enrollment roster — everyone enrolled, excluding anyone withdrawn — as an Excel file for invoicing. Includes name, phone, email, course type, and client. Attendance is not required. Updates automatically as classes start and complete.</p>
         <div id="invoicing-classes-list">
           <div class="loading-state">
             <div class="skeleton-line" style="width:100%"></div>
@@ -2175,6 +2175,16 @@ async function resolveStudentsColumn(displayCandidates, sampleRows, validator){
 // Roster = students with at least one attendance record for this class (from the
 // same Attendance list the Attendance Portal writes), minus anyone whose
 // enrollment status is Withdrawn. Columns: Name, Email, Phone, Client.
+// Build + download the enrollment roster for one class.
+//
+// Roster = everyone ENROLLED in the class, whether or not any attendance has
+// been marked. It used to be driven off the Attendance list, which meant a
+// class that hadn't started yet exported nothing. Enrollment is the question
+// being asked here, so studentMatchesCourse() is the right source.
+//
+// Withdrawn students are still excluded — this is the invoicing roster, and you
+// don't bill for someone who withdrew.
+// Columns: Name, Phone, Email, Course Type, Client.
 async function downloadEnrollment(courseId, btn){
   const course = state.courses.find(c => c.id === courseId);
   if (!course){ showToast('Course not found.', 'error'); return; }
@@ -2185,83 +2195,65 @@ async function downloadEnrollment(courseId, btn){
 
   try {
     const courseTitle = course.fields.Title || '';
-    const courseNumId = String(course.fields.id || '');
-    const courseClient = fieldVal(course.fields, 'Partner') || '';   // fallback only
+    const courseClient = fieldVal(course.fields, 'Partner') || '';          // fallback only
+    const courseTypeFallback = fieldVal(course.fields, 'CourseType') || ''; // fallback only
 
-    // 1) All attendance rows for this course (paginated), matched the same way
-    //    the Attendance Portal matches them.
-    const attendance = await graphGetAll(
-      `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.attendanceListId}/items?expand=fields`
-    );
-    const courseRecords = attendance.filter(r => {
-      const f = r.fields;
-      if (f.CourseLookupId && String(f.CourseLookupId) === courseNumId) return true;
-      if (typeof f.Course === 'object' && f.Course && String(f.Course.Id) === courseNumId) return true;
-      return false;
-    });
-    if (!courseRecords.length){
-      showToast('No attendance has been marked for this class yet.', 'error');
-      return;
-    }
-
-    // 2) Distinct students who've been marked (by StudentLookupId, fallback name)
-    const markedById = new Set();
-    const markedByName = new Set();
-    courseRecords.forEach(r => {
-      const f = r.fields;
-      if (f.StudentLookupId) markedById.add(String(f.StudentLookupId));
-      else if (f.Title) markedByName.add(f.Title.trim().toLowerCase());
-    });
-
-    // 3) Students list (paginated) + resolve email/phone/status columns
+    // Pull the Students list fresh rather than using the sign-in copy, so a
+    // student added minutes ago is on the roster.
     const students = await graphGetAll(
       `/sites/${CONFIG.siteHostname},${CONFIG.siteId}/lists/${CONFIG.studentsListId}/items?expand=fields`
     );
     const fieldMap = await ensureStudentFieldMap(students);
-    const statusField = fieldMap.status, emailField = fieldMap.email, phoneField = fieldMap.phone, clientField = fieldMap.client;
-    if (!statusField) console.warn('Could not resolve the Withdrawn status column — withdrawn students may not be filtered out.');
+    const statusField = fieldMap.status, emailField = fieldMap.email,
+          phoneField = fieldMap.phone, clientField = fieldMap.client;
+    if (!statusField) console.warn('Could not resolve the status column — withdrawn students may not be filtered out.');
+    const courseTypeKey = resolveCourseTypeKey();
 
-    const byId = new Map(), byName = new Map();
-    students.forEach(s => {
-      const f = s.fields;
-      if (f.id != null) byId.set(String(f.id), s);
-      if (f.Title) byName.set(f.Title.trim().toLowerCase(), s);
-    });
+    // Enrolled in THIS class, by any of the four link shapes the Students list uses.
+    const enrolled = students.filter(s => studentMatchesCourse(s.fields, course));
+    if (!enrolled.length){
+      showToast('No students are linked to this class yet.', 'error');
+      return;
+    }
 
-    // 4) Assemble rows, excluding withdrawn, deduped
     const seen = new Set();
     const rows = [];
-    const pushRow = (studentRow, fallbackName) => {
-      const f = studentRow ? studentRow.fields : null;
-      const name = (f && f.Title) || fallbackName || '';
-      const key = (f && f.id != null) ? 'id:' + f.id : 'nm:' + name.trim().toLowerCase();
-      if (!name || seen.has(key)) return;
+    enrolled.forEach(s => {
+      const f = s.fields || {};
+      const name = cellText(f.Title) || '';
+      if (!name) return;
+      const key = (f.id != null) ? 'id:' + f.id : 'nm:' + name.trim().toLowerCase();
+      if (seen.has(key)) return;
       seen.add(key);
-      if (f && statusField){
+      if (statusField){
         const v = f[statusField];
         const val = (typeof v === 'object' && v) ? v.Value : v;
-        if (val === 'Withdrawn') return;   // skip withdrawn
+        if (val === 'Withdrawn') return;   // not billable
       }
+      // Course type lives on the student record for legacy imports; fall back
+      // to the course's own value.
+      const courseType = cellText(f.CourseType)
+        || (courseTypeKey ? cellText(f[courseTypeKey]) : '')
+        || courseTypeFallback;
       rows.push({
         name,
-        email: (f && emailField) ? cellText(f[emailField]) : '',
-        phone: (f && phoneField) ? cellText(f[phoneField]) : '',
-        client: (f && clientField && cellText(f[clientField])) ? cellText(f[clientField]) : courseClient,
+        phone: phoneField ? cellText(f[phoneField]) : '',
+        email: emailField ? cellText(f[emailField]) : '',
+        courseType,
+        client: (clientField && cellText(f[clientField])) ? cellText(f[clientField]) : courseClient,
       });
-    };
-    markedById.forEach(spId => pushRow(byId.get(spId), null));
-    markedByName.forEach(nm => { const s = byName.get(nm); pushRow(s, s ? null : nm); });
+    });
 
     if (!rows.length){
-      showToast('Every marked student in this class is withdrawn — nothing to export.', 'error');
+      showToast('Every student linked to this class is withdrawn — nothing to export.', 'error');
       return;
     }
     rows.sort((a,b) => a.name.localeCompare(b.name));
 
-    // 5) Build + download the workbook
-    const aoa = [['Name','Email','Phone','Client'], ...rows.map(r => [r.name, r.email, r.phone, r.client])];
+    const aoa = [['Name','Phone','Email','Course Type','Client'],
+                 ...rows.map(r => [r.name, r.phone, r.email, r.courseType, r.client])];
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = [{wch:28},{wch:32},{wch:18},{wch:26}];
+    ws['!cols'] = [{wch:28},{wch:18},{wch:32},{wch:16},{wch:28}];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Enrollment');
     const safe = (courseTitle || 'Class').replace(/[^a-zA-Z0-9._-]/g,'_');
